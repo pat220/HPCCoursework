@@ -7,12 +7,13 @@ OBJS_TESTS = UnitTests.o
 LDLIBS = -llapack -lblas -lboost_program_options
 TARGET = solver
 TARGET_TESTS = unittests
+TARGET_DOXY = doxygen_file
 
 default: $(TARGET)
 
 %.o : %.cpp $(HDRS)
 	$(CXX) $(CXXFLAGS) -o $@ -c $<
-
+	
 $(TARGET): $(OBJS) $(OBJS_MAIN)
 	$(CXX) -o $@ $^ $(LDLIBS)
 
@@ -20,6 +21,9 @@ $(TARGET_TESTS): $(OBJS) $(OBJS_TESTS)
 	$(CXX) -o $@ $^ $(LDLIBS)
 	
 .PHONY: clean	
-
 clean:	
 	-rm -f *.o $(TARGET) $(TARGET_TESTS)
+	
+.PHONY: docs
+docs:
+	@doxygen -g $(TARGET_DOXY)

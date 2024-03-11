@@ -4,8 +4,10 @@
 
 using namespace std;
 
+#define BOOST_TEST_MODULE UnitTests
+
 #include <boost/program_options.hpp>
-namespace po = boost::program_options;
+#include <boost/test/included/unit_test.hpp>
 
 #include "LidDrivenCavity.h"
 
@@ -47,8 +49,9 @@ bool compareFiles(const string& file1, const string& file2) {
     return false;
 }
 
-int main(int argc, char **argv)
-{
+// Boost Test Case for file comparison LidDrivenCavitySolver
+BOOST_AUTO_TEST_CASE(LidDrivenCavitySolver_file_comparison) {
+
     LidDrivenCavity* solver = new LidDrivenCavity();
 
     // Hardcoded values
@@ -77,20 +80,44 @@ int main(int argc, char **argv)
     solver->WriteSolution("Test1.txt");
 
     delete solver; // Release the allocated memory
-    
-    // Compare Test1.txt with Baseline.txt OUTPUT
-    if (compareFiles("Test1.txt", "Baseline.txt")) {
-        cout << "The solutions match." << endl;
-    } else {
-        cout << "The solutions do not match." << endl;
-    }
 
-    // Compare ic1.txt with ic.txt INITIAL CONDITIONS
-    if (compareFiles("ic1.txt", "ic.txt")) {
-        cout << "The solutions match." << endl;
-    } else {
-        cout << "The solutions do not match." << endl;
-    }
+    cout << "Testing output files: " << endl;
+    BOOST_CHECK(compareFiles("Test1.txt", "Baseline.txt"));
 
-    return 0;
+    cout << "Testing input files: " << endl;
+    BOOST_CHECK(compareFiles("ic1.txt", "ic.txt"));
+ 
+}
+
+// Boost Test Case for file comparison SolverCG
+BOOST_AUTO_TEST_CASE(SolverCG_file_comparison) {
+
+    LidDrivenCavity* solverSolve = new LidDrivenCavity();
+
+    // Hardcoded values
+    double Lx = 1.0;
+    double Ly = 1.0;
+    int Nx = 9;
+    int Ny = 9;
+    double dt = 0.01;
+    double T = 1.0;
+    double Re = 10.0;
+
+    solverSolve->SetDomainSize(Lx, Ly);
+    solverSolve->SetGridSize(Nx, Ny);
+    solverSolve->SetTimeStep(dt);
+    solverSolve->SetFinalTime(T);
+    solverSolve->SetReynoldsNumber(Re);
+
+    solverSolve->PrintConfiguration();
+
+    solverSolve->Initialise();
+
+    solverSolve->Integrate();
+
+    delete solverSolve; // Release the allocated memory
+
+    cout << "Testing Solver files: " << endl;
+    BOOST_CHECK(compareFiles("Solver1.txt", "Solver1.txt"));
+ 
 }

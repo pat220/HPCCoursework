@@ -4,7 +4,7 @@ HDRS = SolverCG.h LidDrivenCavity.h
 OBJS = SolverCG.o LidDrivenCavity.o
 OBJS_MAIN = LidDrivenCavitySolver.o
 OBJS_TESTS = UnitTests.o
-LDLIBS = -llapack -lblas -lboost_program_options
+LDLIBS = -llapack -lblas -lboost_program_options -lboost_unit_test_framework
 TARGET = solver
 TARGET_TESTS = unittests
 TARGET_DOXY = doxygen_file
@@ -17,7 +17,7 @@ default: $(TARGET)
 $(TARGET): $(OBJS) $(OBJS_MAIN)
 	$(CXX) -o $@ $^ $(LDLIBS)
 
-$(TARGET_TESTS): $(OBJS) $(OBJS_TESTS)
+$(TARGET_TESTS): $(OBJS_TESTS) $(OBJS) 
 	$(CXX) -o $@ $^ $(LDLIBS)
 	
 .PHONY: clean	

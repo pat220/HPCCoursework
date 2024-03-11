@@ -29,7 +29,9 @@ bool compareFiles(const string& file1, const string& file2) {
     }
 
     string line1, line2;
-    while (getline(stream1, line1) && getline(stream2, line2)) {
+    while (!stream1.eof() && !stream2.eof()) {
+        getline(stream1, line1);
+        getline(stream2, line2);
         if (line1 != line2) {
             cout << "Files are not equal." << endl;
             return false;
@@ -68,7 +70,7 @@ int main(int argc, char **argv)
 
     solver->Initialise();
 
-    solver->WriteSolution("ic.txt");
+    solver->WriteSolution("ic1.txt");
 
     solver->Integrate();
 
@@ -76,8 +78,15 @@ int main(int argc, char **argv)
 
     delete solver; // Release the allocated memory
     
-    // Compare Test1.txt with Baseline.txt
+    // Compare Test1.txt with Baseline.txt OUTPUT
     if (compareFiles("Test1.txt", "Baseline.txt")) {
+        cout << "The solutions match." << endl;
+    } else {
+        cout << "The solutions do not match." << endl;
+    }
+
+    // Compare ic1.txt with ic.txt INITIAL CONDITIONS
+    if (compareFiles("ic1.txt", "ic.txt")) {
         cout << "The solutions match." << endl;
     } else {
         cout << "The solutions do not match." << endl;

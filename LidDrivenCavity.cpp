@@ -7,10 +7,12 @@ using namespace std;
 
 #include <cblas.h>
 
-#define IDX(I,J) ((J)*Nx + (I))
+#define IDX(I,J) ((J)*Nx_local + (I))
+#define IDX_GLOBAL(I,J) ((J)*Nx + (I))
 
 #include "LidDrivenCavity.h"
 #include "SolverCG.h"
+#include "mpi.h"
 
 LidDrivenCavity::LidDrivenCavity()
 {
@@ -58,13 +60,13 @@ void LidDrivenCavity::Initialise()
     v   = new double[Npts]();
     s   = new double[Npts]();
     tmp = new double[Npts]();
-    cg  = new SolverCG(Nx, Ny, dx, dy);
+    cg  = new SolverCG(Nx_local, Ny_local, dx, dy);
 }
 
 void LidDrivenCavity::Integrate()
 {
     int NSteps = ceil(T/dt);
-    for (int t = 0; t < NSteps; ++t)
+    for (int t = 0; t < 1; ++t) // NSteps; ++t)
     {
         std::cout << "Step: " << setw(8) << t
                   << "  Time: " << setw(8) << t*dt
@@ -141,7 +143,7 @@ void LidDrivenCavity::UpdateDxDy()
 {
     dx = Lx / (Nx-1);
     dy = Ly / (Ny-1);
-    Npts = Nx * Ny;
+    Npts = Nx_local * Ny_local; // Nx * Ny;
 }
 
 
@@ -152,43 +154,138 @@ void LidDrivenCavity::Advance()
     double dx2i = 1.0/dx/dx;
     double dy2i = 1.0/dy/dy;
 
+    // Calculate starting and ending points of each process
+    // Divide number of points over the number of processos and get minimum number of points each needs
+    double extra_x = Nx % p;
+    double extra_y = Ny % p;
+    int min_points_x = (Nx - extra_x) / p;
+    int min_points_y = (Ny - extra_y) / p;
+
+    // Calculate the starting and ending points of each process
+    int start_x, end_x, start_y, end_y;
+    int Nx_local, Ny_local;
+    if (rank < extra_x) {
+        min_points_x++;
+        min_points_y++;
+        start_x = rank * min_points_x;
+        end_x = (rank  + 1)* min_points_x;
+        start_y = rank * min_points_y;
+        end_y = (rank  + 1)* min_points_y;
+        Nx_local = end_x - start_x;
+        Ny_local = end_y - start_y;
+    } else {
+        start_x = (min_points_x + 1) * extra_x + min_points_x * (rank - extra_x);
+        end_x = (min_points_x + 1) * extra_x + min_points_x * (rank - extra_x + 1);
+        start_y = (min_points_y + 1) * extra_y + min_points_y * (rank - extra_y);
+        end_y = (min_points_y + 1) * extra_y + min_points_y * (rank - extra_y + 1);
+        Nx_local = end_x - start_x;
+        Ny_local = end_y - start_y;
+    }
+
     // Boundary node vorticity
-    for (int i = 1; i < Nx-1; ++i) {
-        // top
-        v[IDX(i,0)]    = 2.0 * dy2i * (s[IDX(i,0)]    - s[IDX(i,1)]);
-        // bottom
-        v[IDX(i,Ny-1)] = 2.0 * dy2i * (s[IDX(i,Ny-1)] - s[IDX(i,Ny-2)])
-                       - 2.0 * dyi*U;
+    // Cheking if the process is a corner and take that into account for the starting and end points
+    // First checking "insider" ranks within the border of the grid
+    if (coords[0] == 0 && (coords[1] != 0 || coords[1] != p -1))
+    {
+        for (int i = 0; i < Nx_local; ++i) {
+            // top
+            v[IDX(i,0)]    = 2.0 * dy2i * (s[IDX(i,0)]    - s[IDX(i,1)]);
+        }
     }
-    for (int j = 1; j < Ny-1; ++j) {
-        // left
-        v[IDX(0,j)]    = 2.0 * dx2i * (s[IDX(0,j)]    - s[IDX(1,j)]);
-        // right
-        v[IDX(Nx-1,j)] = 2.0 * dx2i * (s[IDX(Nx-1,j)] - s[IDX(Nx-2,j)]);
+    else if (coords[0] == p - 1 && (coords[1] != 0 || coords[1] != p -1))
+    {
+        for (int i = 0; i < Nx_local; ++i) {
+            // bottom
+            v[IDX(i,Ny_local-1)] = 2.0 * dy2i * (s[IDX(i,Ny_local-1)] - s[IDX(i,Ny_local-2)])
+                           - 2.0 * dyi*U;
+        }
     }
-
-    // Compute interior vorticity
-    for (int i = 1; i < Nx - 1; ++i) {
-        for (int j = 1; j < Ny - 1; ++j) {
-            v[IDX(i,j)] = dx2i*(
-                    2.0 * s[IDX(i,j)] - s[IDX(i+1,j)] - s[IDX(i-1,j)])
-                        + 1.0/dy/dy*(
-                    2.0 * s[IDX(i,j)] - s[IDX(i,j+1)] - s[IDX(i,j-1)]);
+    else if (coords[1] == 0 && (coords[0] != 0 || coords[0] != p -1))
+    {  
+        for (int j = 0; j < Ny_local; ++j) {
+            // left
+            v[IDX(0,j)]    = 2.0 * dx2i * (s[IDX(0,j)]    - s[IDX(1,j)]);
+        }   
+    }
+    else if (coords[1] == p - 1 && (coords[0] != 0 || coords[0] != p -1))
+    {
+        for (int j = 0; j < Ny_local; ++j) {
+            // right
+            v[IDX(Nx_local-1,j)] = 2.0 * dx2i * (s[IDX(Nx_local-1,j)] - s[IDX(Nx_local-2,j)]);
         }
     }
 
-    // Time advance vorticity
-    for (int i = 1; i < Nx - 1; ++i) {
-        for (int j = 1; j < Ny - 1; ++j) {
-            v[IDX(i,j)] = v[IDX(i,j)] + dt*(
-                ( (s[IDX(i+1,j)] - s[IDX(i-1,j)]) * 0.5 * dxi
-                 *(v[IDX(i,j+1)] - v[IDX(i,j-1)]) * 0.5 * dyi)
-              - ( (s[IDX(i,j+1)] - s[IDX(i,j-1)]) * 0.5 * dyi
-                 *(v[IDX(i+1,j)] - v[IDX(i-1,j)]) * 0.5 * dxi)
-              + nu * (v[IDX(i+1,j)] - 2.0 * v[IDX(i,j)] + v[IDX(i-1,j)])*dx2i
-              + nu * (v[IDX(i,j+1)] - 2.0 * v[IDX(i,j)] + v[IDX(i,j-1)])*dy2i);
+    if (coords[0] == 0 && coords[1] == 0)
+    {
+        for (int i = 1; i < Nx_local; ++i) {
+            // top
+            v[IDX(i,0)]    = 2.0 * dy2i * (s[IDX(i,0)]    - s[IDX(i,1)]);
+        }
+        for (int j = 1; j < Ny_local; ++j) {
+            // left
+            v[IDX(0,j)]    = 2.0 * dx2i * (s[IDX(0,j)]    - s[IDX(1,j)]);
         }
     }
+    else if (coords[0] == 0 && coords[1] == p -1)
+    {
+        for (int i = 0; i < Nx_local - 1; ++i) {
+            // top
+            v[IDX(i,0)]    = 2.0 * dy2i * (s[IDX(i,0)]    - s[IDX(i,1)]);
+        }
+        for (int j = 1; j < Ny_local; ++j) {
+            // right
+            v[IDX(Nx_local-1,j)] = 2.0 * dx2i * (s[IDX(Nx_local-1,j)] - s[IDX(Nx_local-2,j)]);
+        }
+    }
+    else if (coords[0] == p - 1 && coords[1] == 0)
+    {
+        for (int i = 1; i < Nx_local; ++i) {
+            // bottom
+            v[IDX(i,Ny_local-1)] = 2.0 * dy2i * (s[IDX(i,Ny_local-1)] - s[IDX(i,Ny_local-2)])
+                           - 2.0 * dyi*U;
+        }
+        for (int j = 0; j < Ny_local - 1; ++j) {
+            // left
+            v[IDX(0,j)]    = 2.0 * dx2i * (s[IDX(0,j)]    - s[IDX(1,j)]);
+        }
+
+    }
+    else if (coords[0] == p - 1 && coords[1] == p - 1)
+    {
+        for (int i = 0; i < Nx_local-1; ++i) {
+            // bottom
+            v[IDX(i,Ny_local-1)] = 2.0 * dy2i * (s[IDX(i,Ny_local-1)] - s[IDX(i,Ny_local-2)])
+                           - 2.0 * dyi*U;
+        }
+        for (int j = 1; j < Ny_local-1; ++j) {
+            // right
+            v[IDX(Nx_local-1,j)] = 2.0 * dx2i * (s[IDX(Nx_local-1,j)] - s[IDX(Nx_local-2,j)]);
+        }
+    }
+
+
+    // // Compute interior vorticity
+    // for (int i = 1; i < Nx - 1; ++i) {
+    //     for (int j = 1; j < Ny - 1; ++j) {
+    //         v[IDX(i,j)] = dx2i*(
+    //                 2.0 * s[IDX(i,j)] - s[IDX(i+1,j)] - s[IDX(i-1,j)])
+    //                     + 1.0/dy/dy*(
+    //                 2.0 * s[IDX(i,j)] - s[IDX(i,j+1)] - s[IDX(i,j-1)]);
+    //     }
+    // }
+
+    // // Time advance vorticity
+    // for (int i = 1; i < Nx - 1; ++i) {
+    //     for (int j = 1; j < Ny - 1; ++j) {
+    //         v[IDX(i,j)] = v[IDX(i,j)] + dt*(
+    //             ( (s[IDX(i+1,j)] - s[IDX(i-1,j)]) * 0.5 * dxi
+    //              *(v[IDX(i,j+1)] - v[IDX(i,j-1)]) * 0.5 * dyi)
+    //           - ( (s[IDX(i,j+1)] - s[IDX(i,j-1)]) * 0.5 * dyi
+    //              *(v[IDX(i+1,j)] - v[IDX(i-1,j)]) * 0.5 * dxi)
+    //           + nu * (v[IDX(i+1,j)] - 2.0 * v[IDX(i,j)] + v[IDX(i-1,j)])*dx2i
+    //           + nu * (v[IDX(i,j+1)] - 2.0 * v[IDX(i,j)] + v[IDX(i,j-1)])*dy2i);
+    //     }
+    // }
 
     // Sinusoidal test case with analytical solution, which can be used to test
     // the Poisson solver
@@ -205,5 +302,16 @@ void LidDrivenCavity::Advance()
     */
 
     // Solve Poisson problem
-    cg->Solve(v, s);
+    // cg->Solve(v, s);
+}
+
+
+void LidDrivenCavity::GetInfoMPI(MPI_Comm comm, int rank, int size, int* coords, int p)
+{
+    // Use the comm, rank, size, and coords information here
+    this->comm = comm;
+    this->rank = rank;
+    this->size = size;
+    this->coords = coords;
+    this->p = p;
 }

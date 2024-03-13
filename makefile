@@ -12,7 +12,7 @@ TARGET_DOXY = doxygen_file
 default: $(TARGET)
 
 %.o : %.cpp $(HDRS)
-	$(CXX) $(CXXFLAGS) -o $@ -c $<
+	$(CXX) $(CXXFLAGS) -g -o $@ -c $<
 	
 $(TARGET): $(OBJS_MAIN) $(OBJS) 
 	$(CXX) -o $@ $^ $(LDLIBS)

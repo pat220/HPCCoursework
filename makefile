@@ -1,4 +1,4 @@
-CXX = g++
+CXX = mpicxx
 CXXFLAGS = -std=c++11 -Wall -O2
 HDRS = SolverCG.h LidDrivenCavity.h
 OBJS = SolverCG.o LidDrivenCavity.o

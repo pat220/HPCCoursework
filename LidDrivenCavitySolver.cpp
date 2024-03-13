@@ -5,6 +5,8 @@ using namespace std;
 namespace po = boost::program_options;
 
 #include "LidDrivenCavity.h"
+#include "mpi.h"
+#include <cmath> // Include the cmath library for sqrt function
 
 /**
 * @file LidDrivenCavitySolver.cpp
@@ -46,12 +48,42 @@ int main(int argc, char **argv)
         return 0;
     }
 
+    // Initialize MPI
+    MPI_Init(&argc, &argv);
+
+    // Get the total number of processes and the rank of the current process
+    int MPI_size, MPI_rank;
+    MPI_Comm_size(MPI_COMM_WORLD, &MPI_size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &MPI_rank);
+
+    // Create a Cartesian topology
+    int p = sqrt(MPI_size);
+    int dims[2] = {p, p};  // pxp grid
+    int periods[2] = {0, 0};  // No periodicity
+    int coords[2];
+    MPI_Comm cart_comm;
+    MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, 0, &cart_comm);
+    MPI_Cart_coords(cart_comm, MPI_rank, 2, coords);
+
+    // Print the rank and coordinates of each process
+    cout << "Process " << MPI_rank << " coordinates: (" << coords[0] << ", " << coords[1] << ")" << endl;
+
     LidDrivenCavity* solver = new LidDrivenCavity();
     solver->SetDomainSize(vm["Lx"].as<double>(), vm["Ly"].as<double>());
     solver->SetGridSize(vm["Nx"].as<int>(),vm["Ny"].as<int>());
     solver->SetTimeStep(vm["dt"].as<double>());
     solver->SetFinalTime(vm["T"].as<double>());
     solver->SetReynoldsNumber(vm["Re"].as<double>());
+
+    // Create the solver object in rank 0 and broadcast it to other processes
+    // if (MPI_rank == 0) {
+    //     solver->SetDomainSize(vm["Lx"].as<double>(), vm["Ly"].as<double>());
+    //     solver->SetGridSize(vm["Nx"].as<int>(),vm["Ny"].as<int>());
+    //     solver->SetTimeStep(vm["dt"].as<double>());
+    //     solver->SetFinalTime(vm["T"].as<double>());
+    //     solver->SetReynoldsNumber(vm["Re"].as<double>());
+    // }
+    // MPI_Bcast(&solver, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     solver->PrintConfiguration();
 
@@ -63,5 +95,11 @@ int main(int argc, char **argv)
 
     solver->WriteSolution("final.txt");
 
-	return 0;
+    delete solver; // Release the allocated memory
+
+    // Finalise MPI
+    MPI_Finalize();
+
+    return 0;
+
 }

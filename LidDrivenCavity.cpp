@@ -34,7 +34,7 @@ void LidDrivenCavity::SetGridSize(int nx, int ny)
 {
     this->Nx = nx;
     this->Ny = ny;
-    UpdateDxDy();
+    
 }
 
 void LidDrivenCavity::SetTimeStep(double deltat)
@@ -52,6 +52,38 @@ void LidDrivenCavity::SetReynoldsNumber(double re)
     this->Re = re;
     this->nu = 1.0/re;
 }
+
+void LidDrivenCavity::SetLocalVariables(int Nx, int Ny, int p, int rank)
+{
+    // Calculate starting and ending points of each process
+    // Divide number of points over the number of processos and get minimum number of points each needs
+    double extra_x = Nx % p;
+    double extra_y = Ny % p;
+    int min_points_x = (Nx - extra_x) / p;
+    int min_points_y = (Ny - extra_y) / p;
+
+    // Calculate the starting and ending points of each process
+    if (rank < extra_x) {
+        min_points_x++;
+        min_points_y++;
+        this->start_x = rank * min_points_x;
+        this->end_x = (rank  + 1)* min_points_x;
+        this->start_y = rank * min_points_y;
+        this->end_y = (rank  + 1)* min_points_y;
+        this->Nx_local = end_x - start_x;
+        this->Ny_local = end_y - start_y;
+    } else {
+        this->start_x = (min_points_x + 1) * extra_x + min_points_x * (rank - extra_x);
+        this->end_x = (min_points_x + 1) * extra_x + min_points_x * (rank - extra_x + 1);
+        this->start_y = (min_points_y + 1) * extra_y + min_points_y * (rank - extra_y);
+        this->end_y = (min_points_y + 1) * extra_y + min_points_y * (rank - extra_y + 1);
+        this->Nx_local = end_x - start_x;
+        this->Ny_local = end_y - start_y;
+    }
+    
+    UpdateDxDy();
+}
+
 
 void LidDrivenCavity::Initialise()
 {
@@ -154,33 +186,6 @@ void LidDrivenCavity::Advance()
     double dx2i = 1.0/dx/dx;
     double dy2i = 1.0/dy/dy;
 
-    // Calculate starting and ending points of each process
-    // Divide number of points over the number of processos and get minimum number of points each needs
-    double extra_x = Nx % p;
-    double extra_y = Ny % p;
-    int min_points_x = (Nx - extra_x) / p;
-    int min_points_y = (Ny - extra_y) / p;
-
-    // Calculate the starting and ending points of each process
-    int start_x, end_x, start_y, end_y;
-    int Nx_local, Ny_local;
-    if (rank < extra_x) {
-        min_points_x++;
-        min_points_y++;
-        start_x = rank * min_points_x;
-        end_x = (rank  + 1)* min_points_x;
-        start_y = rank * min_points_y;
-        end_y = (rank  + 1)* min_points_y;
-        Nx_local = end_x - start_x;
-        Ny_local = end_y - start_y;
-    } else {
-        start_x = (min_points_x + 1) * extra_x + min_points_x * (rank - extra_x);
-        end_x = (min_points_x + 1) * extra_x + min_points_x * (rank - extra_x + 1);
-        start_y = (min_points_y + 1) * extra_y + min_points_y * (rank - extra_y);
-        end_y = (min_points_y + 1) * extra_y + min_points_y * (rank - extra_y + 1);
-        Nx_local = end_x - start_x;
-        Ny_local = end_y - start_y;
-    }
 
     // Boundary node vorticity
     // Cheking if the process is a corner and take that into account for the starting and end points

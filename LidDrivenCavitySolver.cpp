@@ -66,7 +66,7 @@ int main(int argc, char **argv)
     MPI_Cart_coords(cart_comm, rank, 2, coords);
 
     // Print the rank and coordinates of each process
-    cout << "Process " << rank << " coordinates: (" << coords[0] << ", " << coords[1] << ")" << endl;
+    // cout << "Process " << rank << " coordinates: (" << coords[0] << ", " << coords[1] << ")" << endl;
 
     LidDrivenCavity* solver = new LidDrivenCavity();
     solver->SetDomainSize(vm["Lx"].as<double>(), vm["Ly"].as<double>());
@@ -74,7 +74,8 @@ int main(int argc, char **argv)
     solver->SetTimeStep(vm["dt"].as<double>());
     solver->SetFinalTime(vm["T"].as<double>());
     solver->SetReynoldsNumber(vm["Re"].as<double>());
-
+    solver->SetLocalVariables(vm["Nx"].as<int>(), vm["Ny"].as<int>(), p, rank);
+    
     solver->Initialise();
 
     solver->GetInfoMPI(cart_comm, rank, size, coords, p);
@@ -88,6 +89,7 @@ int main(int argc, char **argv)
     delete solver; // Release the allocated memory
 
     // Finalise MPI
+    MPI_Comm_free(&cart_comm);
     MPI_Finalize();
 
     return 0;

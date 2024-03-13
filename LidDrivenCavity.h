@@ -18,6 +18,7 @@ public:
     void SetTimeStep(double deltat);
     void SetFinalTime(double finalt);
     void SetReynoldsNumber(double Re);
+    void SetLocalVariables(int Nx, int Ny, int p, int rank);
 
     void Initialise();
     void Integrate();
@@ -51,6 +52,10 @@ private:
 
     int Nx_local;
     int Ny_local;
+    int start_x;
+    int end_x;
+    int start_y;
+    int end_y;
     
     SolverCG* cg = nullptr;
 

@@ -30,6 +30,9 @@ private:
     double* v   = nullptr;
     double* s   = nullptr;
     double* tmp = nullptr;
+    double* v_whole = nullptr;
+    double* s_whole = nullptr;
+    double* tmp_whole = nullptr;
 
     double dt   = 0.01;
     double T    = 1.0;
@@ -46,18 +49,20 @@ private:
 
     double rank = 0; // MPI rank default value
     double size = 0; // MPI size default value
-    MPI_Comm comm;
+    MPI_Comm cart_comm;
     int* coords;
     int p;
 
     int Nx_local;
     int Ny_local;
+    int Npts_local;
     int start_x;
     int end_x;
     int start_y;
     int end_y;
     
     SolverCG* cg = nullptr;
+    SolverCG* cg_whole = nullptr;
 
     void CleanUp();
     void UpdateDxDy();

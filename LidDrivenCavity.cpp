@@ -84,15 +84,19 @@ void LidDrivenCavity::SetLocalVariables(int Nx, int Ny, int p, int rank)
     UpdateDxDy();
 }
 
-
 void LidDrivenCavity::Initialise()
 {
     CleanUp();
 
-    v   = new double[Npts]();
-    s   = new double[Npts]();
-    tmp = new double[Npts]();
+    v   = new double[Npts_local](); // local
+    s   = new double[Npts_local](); // local
+    tmp = new double[Npts_local]();
     cg  = new SolverCG(Nx_local, Ny_local, dx, dy);
+
+    v_whole = new double[Npts](); // whole
+    s_whole = new double[Npts](); // whole
+    tmp_whole = new double[Npts]();
+    cg_whole  = new SolverCG(Nx, Ny, dx, dy);
 }
 
 void LidDrivenCavity::Integrate()
@@ -167,6 +171,10 @@ void LidDrivenCavity::CleanUp()
         delete[] s;
         delete[] tmp;
         delete cg;
+        delete[] v_whole;
+        delete[] s_whole;
+        delete[] tmp_whole;
+        delete cg_whole;
     }
 }
 
@@ -175,7 +183,8 @@ void LidDrivenCavity::UpdateDxDy()
 {
     dx = Lx / (Nx-1);
     dy = Ly / (Ny-1);
-    Npts = Nx_local * Ny_local; // Nx * Ny;
+    Npts_local = Nx_local * Ny_local;
+    Npts = Nx * Ny;
 }
 
 
@@ -219,7 +228,6 @@ void LidDrivenCavity::Advance()
             v[IDX(Nx_local-1,j)] = 2.0 * dx2i * (s[IDX(Nx_local-1,j)] - s[IDX(Nx_local-2,j)]);
         }
     }
-
     if (coords[0] == 0 && coords[1] == 0)
     {
         for (int i = 1; i < Nx_local; ++i) {
@@ -267,9 +275,45 @@ void LidDrivenCavity::Advance()
             v[IDX(Nx_local-1,j)] = 2.0 * dx2i * (s[IDX(Nx_local-1,j)] - s[IDX(Nx_local-2,j)]);
         }
     }
+    
+    // It runs well until here
 
+    // Gather the data in rank 0
+    
+    // Gather the local v arrays from all ranks to rank 0
+    MPI_Gather(v, Nx_local * Ny_local, MPI_DOUBLE, v_whole, Nx * Ny, MPI_DOUBLE, 0, cart_comm);
+    MPI_Gather(s, Nx_local * Ny_local, MPI_DOUBLE, s_whole, Nx * Ny, MPI_DOUBLE, 0, cart_comm);
+    
+    // Only rank 0 will have the whole v array
+    if (rank == 0) {
+        // Process the whole v array in rank 0
+        // Compute interior vorticity
+            for (int i = 1; i < Nx - 1; ++i) {
+                for (int j = 1; j < Ny - 1; ++j) {
+                    v_whole[IDX(i,j)] = dx2i*(
+                            2.0 * s_whole[IDX(i,j)] - s_whole[IDX(i+1,j)] - s_whole[IDX(i-1,j)])
+                                + 1.0/dy/dy*(
+                            2.0 * s_whole[IDX(i,j)] - s_whole[IDX(i,j+1)] - s_whole[IDX(i,j-1)]);
+                }
+            }
 
-    // // Compute interior vorticity
+            // Time advance vorticity
+            for (int i = 1; i < Nx - 1; ++i) {
+                for (int j = 1; j < Ny - 1; ++j) {
+                    v_whole[IDX(i,j)] = v_whole[IDX(i,j)] + dt*(
+                        ( (s_whole[IDX(i+1,j)] - s_whole[IDX(i-1,j)]) * 0.5 * dxi
+                        *(v_whole[IDX(i,j+1)] - v_whole[IDX(i,j-1)]) * 0.5 * dyi)
+                    - ( (s_whole[IDX(i,j+1)] - s_whole[IDX(i,j-1)]) * 0.5 * dyi
+                        *(v_whole[IDX(i+1,j)] - v_whole[IDX(i-1,j)]) * 0.5 * dxi)
+                    + nu * (v_whole[IDX(i+1,j)] - 2.0 * v_whole[IDX(i,j)] + v_whole[IDX(i-1,j)])*dx2i
+                    + nu * (v_whole[IDX(i,j+1)] - 2.0 * v_whole[IDX(i,j)] + v_whole[IDX(i,j-1)])*dy2i);
+                }
+            }
+
+        cg_whole->Solve(v_whole, s_whole);
+        
+        }
+
     // for (int i = 1; i < Nx - 1; ++i) {
     //     for (int j = 1; j < Ny - 1; ++j) {
     //         v[IDX(i,j)] = dx2i*(
@@ -284,13 +328,14 @@ void LidDrivenCavity::Advance()
     //     for (int j = 1; j < Ny - 1; ++j) {
     //         v[IDX(i,j)] = v[IDX(i,j)] + dt*(
     //             ( (s[IDX(i+1,j)] - s[IDX(i-1,j)]) * 0.5 * dxi
-    //              *(v[IDX(i,j+1)] - v[IDX(i,j-1)]) * 0.5 * dyi)
-    //           - ( (s[IDX(i,j+1)] - s[IDX(i,j-1)]) * 0.5 * dyi
-    //              *(v[IDX(i+1,j)] - v[IDX(i-1,j)]) * 0.5 * dxi)
-    //           + nu * (v[IDX(i+1,j)] - 2.0 * v[IDX(i,j)] + v[IDX(i-1,j)])*dx2i
-    //           + nu * (v[IDX(i,j+1)] - 2.0 * v[IDX(i,j)] + v[IDX(i,j-1)])*dy2i);
+    //             *(v[IDX(i,j+1)] - v[IDX(i,j-1)]) * 0.5 * dyi)
+    //         - ( (s[IDX(i,j+1)] - s[IDX(i,j-1)]) * 0.5 * dyi
+    //             *(v[IDX(i+1,j)] - v[IDX(i-1,j)]) * 0.5 * dxi)
+    //         + nu * (v[IDX(i+1,j)] - 2.0 * v[IDX(i,j)] + v[IDX(i-1,j)])*dx2i
+    //         + nu * (v[IDX(i,j+1)] - 2.0 * v[IDX(i,j)] + v[IDX(i,j-1)])*dy2i);
     //     }
     // }
+
 
     // Sinusoidal test case with analytical solution, which can be used to test
     // the Poisson solver
@@ -307,14 +352,14 @@ void LidDrivenCavity::Advance()
     */
 
     // Solve Poisson problem
-    // cg->Solve(v, s);
+    cg->Solve(v, s);
 }
 
 
 void LidDrivenCavity::GetInfoMPI(MPI_Comm comm, int rank, int size, int* coords, int p)
 {
     // Use the comm, rank, size, and coords information here
-    this->comm = comm;
+    this->cart_comm = comm;
     this->rank = rank;
     this->size = size;
     this->coords = coords;

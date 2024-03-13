@@ -1,0 +1,11 @@
+# Ignore all .txt files except for those starting with "Baseline"
+*.txt
+!Baseline*.txt
+
+# Ignore the .vscode directory
+.vscode/
+
+# Ignore all .o, .obj, and .out files
+*.o
+*.obj
+*.out

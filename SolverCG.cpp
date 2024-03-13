@@ -93,20 +93,6 @@ void SolverCG::Solve(double* b, double* x) {
     cout << "Converged in " << k << " iterations. eps = " << eps << endl;
 
 
-    // Output result of solver to a file to check it works properly
-    std::ofstream solveFile("Solve1.txt");
-
-    // Check if the file is successfully opened
-    if (!solveFile.is_open()) {
-        std::cerr << "Error opening Solve1.txt for writing." << std::endl;
-        return;
-    }
-
-    solveFile << "Converged in " << k << " iterations. eps = " << eps << std::endl;
-
-    // Close the output file
-    solveFile.close();
-
 }
 
 

@@ -21,6 +21,7 @@ public:
     void SetLocalVariables(int Nx, int Ny, int p, int rank);
 
     void Initialise();
+    void InitialiseBuffers();
     void Integrate();
     void WriteSolution(std::string file);
     void PrintConfiguration();
@@ -49,17 +50,17 @@ private:
 
     double rank = 0; // MPI rank default value
     double size = 0; // MPI size default value
-    MPI_Comm cart_comm;
-    int* coords;
-    int p;
+    MPI_Comm cart_comm = MPI_COMM_NULL;
+    int* coords = nullptr;
+    int p = 1;
 
-    int Nx_local;
-    int Ny_local;
-    int Npts_local;
-    int start_x;
-    int end_x;
-    int start_y;
-    int end_y;
+    int Nx_local = Nx;
+    int Ny_local = Ny;
+    int Npts_local = Npts;
+    int start_x = 0;
+    int end_x = 0;
+    int start_y = 0;
+    int end_y = 0;
 
     double dxi;
     double dyi;
@@ -69,9 +70,30 @@ private:
     SolverCG* cg = nullptr;
     SolverCG* cg_whole = nullptr;
 
+    double* sendBufferTopV = nullptr;
+    double* sendBufferBottomV = nullptr;
+    double* sendBufferLeftV = nullptr;
+    double* sendBufferRightV = nullptr;
+    double* receiveBufferTopV = nullptr;
+    double* receiveBufferBottomV = nullptr;
+    double* receiveBufferLeftV = nullptr;
+    double* receiveBufferRightV = nullptr;
+
+    double* sendBufferTopS = nullptr;
+    double* sendBufferBottomS = nullptr;
+    double* sendBufferLeftS = nullptr;
+    double* sendBufferRightS = nullptr;
+    double* receiveBufferTopS = nullptr;
+    double* receiveBufferBottomS = nullptr;
+    double* receiveBufferLeftS = nullptr;
+    double* receiveBufferRightS = nullptr;
+
     void CleanUp();
+    void CleanUpBuffers();
     void UpdateDxDy();
     void Advance();
+    void SendReceiveEdgesV(double* varArray);
+    void SendReceiveEdgesS(double* varArray);
     void InteriorVorticity(int startX, int endX, int startY, int endY);
     void TimeAdvanceVorticity(int startX, int endX, int startY, int endY);
 };

@@ -77,6 +77,7 @@ int main(int argc, char **argv)
     solver->SetLocalVariables(vm["Nx"].as<int>(), vm["Ny"].as<int>(), p, rank);
     
     solver->Initialise();
+    solver->InitialiseBuffers();
 
     solver->GetInfoMPI(cart_comm, rank, size, coords, p);
 

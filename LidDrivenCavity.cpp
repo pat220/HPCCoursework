@@ -373,33 +373,172 @@ void LidDrivenCavity::Advance()
     //cg->Solve(v, s);
 }
 
+void LidDrivenCavity::InitialiseBuffers()
+{
+    if (sendBufferTopV)
+    {
+        CleanUpBuffers();
+    }
+
+    sendBufferTopV = new double[Nx_local];
+    sendBufferBottomV = new double[Nx_local];
+    sendBufferLeftV = new double[Ny_local];
+    sendBufferRightV = new double[Ny_local];
+
+    receiveBufferTopV = new double[Nx_local];
+    receiveBufferBottomV = new double[Nx_local];
+    receiveBufferLeftV = new double[Ny_local];
+    receiveBufferRightV = new double[Ny_local];
+
+    sendBufferTopS = new double[Nx_local];
+    sendBufferBottomS = new double[Nx_local];
+    sendBufferLeftS = new double[Ny_local];
+    sendBufferRightS = new double[Ny_local];
+
+    receiveBufferTopS = new double[Nx_local];
+    receiveBufferBottomS = new double[Nx_local];
+    receiveBufferLeftS = new double[Ny_local];
+    receiveBufferRightS = new double[Ny_local];
+
+}
+
+void LidDrivenCavity::CleanUpBuffers()
+{
+    if (sendBufferTopV)
+    {
+        delete[] sendBufferTopV;
+        delete[] sendBufferBottomV;
+        delete[] sendBufferLeftV;
+        delete[] sendBufferRightV;
+        delete[] receiveBufferTopV;
+        delete[] receiveBufferBottomV;
+        delete[] receiveBufferLeftV;
+        delete[] receiveBufferRightV;
+
+        delete[] sendBufferTopS;
+        delete[] sendBufferBottomS;
+        delete[] sendBufferLeftS;
+        delete[] sendBufferRightS;
+        delete[] receiveBufferTopS;
+        delete[] receiveBufferBottomS;
+        delete[] receiveBufferLeftS;
+        delete[] receiveBufferRightS;
+    }
+}
+
+void LidDrivenCavity::SendReceiveEdgesV(double* varArray)
+{
+
+    int destVertical, sourceVertical, destHorizontal, sourceHorizontal;
+    MPI_Cart_shift(cart_comm, 0, 1, &sourceVertical, &destVertical);
+    MPI_Cart_shift(cart_comm, 1, 1, &sourceHorizontal, &destHorizontal);
+
+    if (destVertical != MPI_PROC_NULL) {
+        // Send data to bottom members - receive from top [2]
+        for (int i = 0; i < Nx_local; ++i) {
+            sendBufferBottomV[i] = varArray[IDX(i, end_y)];
+        }
+        MPI_Sendrecv(&sendBufferBottomV, Nx_local, MPI_DOUBLE, destVertical, 0, &receiveBufferTopV, Nx_local, MPI_DOUBLE, destVertical, 0, cart_comm, MPI_STATUS_IGNORE);
+    }
+    else if (sourceVertical != MPI_PROC_NULL) {
+        // Send data to top members - receive from bottom [3]
+        for (int i = 0; i < Nx_local; ++i) {
+            sendBufferTopV[i] = varArray[IDX(i, start_y)];
+        }
+        MPI_Sendrecv(sendBufferTopV, Nx_local, MPI_DOUBLE, sourceVertical, 0, receiveBufferBottomV, Nx_local, MPI_DOUBLE, sourceVertical, 0, cart_comm, MPI_STATUS_IGNORE);
+    }
+    
+    if (destHorizontal != MPI_PROC_NULL) {
+        // Send data to right members - receive from left [0]
+        for (int j = 0; j < Ny_local; ++j) {
+            sendBufferRightV[j] = varArray[IDX(end_x, j)];
+        }
+        MPI_Sendrecv(sendBufferRightV, Ny_local, MPI_DOUBLE, destHorizontal, 0, receiveBufferLeftV, Ny_local, MPI_DOUBLE, destHorizontal, 0, cart_comm, MPI_STATUS_IGNORE);
+    }
+    else if (sourceHorizontal != MPI_PROC_NULL) {
+        // Send data to left members - receive from right [1]
+        for (int j = 0; j < Ny_local; ++j) {
+            sendBufferLeftV[j] = varArray[IDX(start_x, j)];
+        }
+        MPI_Sendrecv(sendBufferLeftV, Ny_local, MPI_DOUBLE, sourceHorizontal, 0, receiveBufferRightV, Ny_local, MPI_DOUBLE, sourceHorizontal, 0, cart_comm, MPI_STATUS_IGNORE);
+    }
+
+}
+
+void LidDrivenCavity::SendReceiveEdgesS(double* varArray)
+{
+
+    int destVertical, sourceVertical, destHorizontal, sourceHorizontal;
+    MPI_Cart_shift(cart_comm, 0, 1, &sourceVertical, &destVertical);
+    MPI_Cart_shift(cart_comm, 1, 1, &sourceHorizontal, &destHorizontal);
+
+    if (destVertical != MPI_PROC_NULL) {
+        // Send data to bottom members - receive from top [2]
+        for (int i = 0; i < Nx_local; ++i) {
+            sendBufferBottomS[i] = varArray[IDX(i, end_y)];
+        }
+        MPI_Sendrecv(sendBufferBottomS, Nx_local, MPI_DOUBLE, destVertical, 0, receiveBufferTopS, Nx_local, MPI_DOUBLE, destVertical, 0, cart_comm, MPI_STATUS_IGNORE);
+    }
+    else if (sourceVertical != MPI_PROC_NULL) {
+        // Send data to top members - receive from bottom [3]
+        for (int i = 0; i < Nx_local; ++i) {
+            sendBufferTopS[i] = varArray[IDX(i, start_y)];
+        }
+        MPI_Sendrecv(sendBufferTopS, Nx_local, MPI_DOUBLE, sourceVertical, 0, receiveBufferBottomS, Nx_local, MPI_DOUBLE, sourceVertical, 0, cart_comm, MPI_STATUS_IGNORE);
+    }
+
+}
+
 void LidDrivenCavity::InteriorVorticity(int startX, int endX, int startY, int endY)
 {
+    // Send and receive the edges of the local domain
+    SendReceiveEdgesV(v);
+
+    // Update the vorticity values using the received data
     for (int i = startX; i < endX; ++i) {
         for (int j = startY; j < endY; ++j) {
-            v[IDX(i,j)] = dx2i * (2.0 * s[IDX(i,j)] - s[IDX(i+1,j)] - s[IDX(i-1,j)])
-                        + 1.0/dy/dy * (2.0 * s[IDX(i,j)] - s[IDX(i,j+1)] - s[IDX(i,j-1)]);
+            double leftNeighborValue = (coords[0] > 0) ? receiveBufferLeftV[j - startY] : s[IDX(i - 1, j)];
+            double rightNeighborValue = (coords[0] < p - 1) ? receiveBufferRightV[j - startY] : s[IDX(i + 1, j)];
+            double botomNeighborValue = (coords[1] < p - 1) ? receiveBufferBottomV[i - startX] : s[IDX(i, j + 1)];
+            double topNeighborValue = (coords[1] > 0) ? receiveBufferTopV[i - startX] : s[IDX(i, j - 1)];
+            
+            v[IDX(i,j)] = dx2i * (2.0 * s[IDX(i,j)] - rightNeighborValue - leftNeighborValue)
+                        + 1.0/dy/dy * (2.0 * s[IDX(i,j)] - botomNeighborValue - topNeighborValue);
         }
     }
 }
 
 void LidDrivenCavity::TimeAdvanceVorticity(int startX, int endX, int startY, int endY)
 {
+    // Send and receive the edges of the local domain
+    SendReceiveEdgesV(v);
+    SendReceiveEdgesS(s);
+
+    // Update the vorticity values using the received data
     for (int i = startX; i < endX; ++i)
     {
         for (int j = startY; j < endY; ++j)
         {
+            double leftNeighborValueS = (coords[0] > 0) ? receiveBufferLeftS[j - startY] : s[IDX(i - 1, j)];
+            double rightNeighborValueS = (coords[0] < p - 1) ? receiveBufferRightS[j - startY] : s[IDX(i + 1, j)];
+            double botomNeighborValueS = (coords[1] < p - 1) ? receiveBufferBottomS[i - startX] : s[IDX(i, j + 1)];
+            double topNeighborValueS = (coords[1] > 0) ? receiveBufferTopS[i - startX] : s[IDX(i, j - 1)];
+
+            double leftNeighborValueV = (coords[0] > 0) ? receiveBufferLeftV[j - startY] : v[IDX(i - 1, j)];
+            double rightNeighborValueV = (coords[0] < p - 1) ? receiveBufferRightV[j - startY] : v[IDX(i + 1, j)];
+            double botomNeighborValueV = (coords[1] < p - 1) ? receiveBufferBottomV[i - startX] : v[IDX(i, j + 1)];
+            double topNeighborValueV = (coords[1] > 0) ? receiveBufferTopV[i - startX] : v[IDX(i, j - 1)];
+
             v[IDX(i,j)] = v[IDX(i,j)] + dt*(
-                ( (s[IDX(i+1,j)] - s[IDX(i-1,j)]) * 0.5 * dxi
-                *(v[IDX(i,j+1)] - v[IDX(i,j-1)]) * 0.5 * dyi)
-            - ( (s[IDX(i,j+1)] - s[IDX(i,j-1)]) * 0.5 * dyi
-                *(v[IDX(i+1,j)] - v[IDX(i-1,j)]) * 0.5 * dxi)
-            + nu * (v[IDX(i+1,j)] - 2.0 * v[IDX(i,j)] + v[IDX(i-1,j)])*dx2i
-            + nu * (v[IDX(i,j+1)] - 2.0 * v[IDX(i,j)] + v[IDX(i,j-1)])*dy2i);
+                ( (rightNeighborValueS - leftNeighborValueS) * 0.5 * dxi
+                *(botomNeighborValueV - topNeighborValueV) * 0.5 * dyi)
+            - ( (botomNeighborValueS - topNeighborValueS) * 0.5 * dyi
+                *(rightNeighborValueV - leftNeighborValueV) * 0.5 * dxi)
+            + nu * (rightNeighborValueV - 2.0 * v[IDX(i,j)] + leftNeighborValueV)*dx2i
+            + nu * (botomNeighborValueV - 2.0 * v[IDX(i,j)] + topNeighborValueV)*dy2i);
         }
     }
 }
-
 
 void LidDrivenCavity::GetInfoMPI(MPI_Comm comm, int rank, int size, int *coords, int p)
 {

@@ -12,6 +12,8 @@ using namespace std;
 
 #include "LidDrivenCavity.h"
 #include "SolverCG.h"
+#include "mpi.h"
+#include <cmath> // Include the cmath library for sqrt function
 
 
 /**
@@ -75,15 +77,38 @@ BOOST_AUTO_TEST_CASE(LidDrivenCavitySolver_file_comparison) {
     double T = 1.0;
     double Re = 10.0;
 
+    int argc = 2;
+    char** argv = new char*[argc];
+
+    // Initialize MPI
+    MPI_Init(NULL, NULL);
+
+    // Get the total number of processes and the rank of the current process
+    int size, rank;
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    // Create a Cartesian topology
+    int p = sqrt(size);
+    int dims[2] = {p, p};  // pxp grid
+    int periods[2] = {0, 0};  // No periodicity
+    int coords[2];
+    MPI_Comm cart_comm;
+    MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, 0, &cart_comm);
+    MPI_Cart_coords(cart_comm, rank, 2, coords);
+
     solver->SetDomainSize(Lx, Ly);
     solver->SetGridSize(Nx, Ny);
     solver->SetTimeStep(dt);
     solver->SetFinalTime(T);
     solver->SetReynoldsNumber(Re);
+    solver->SetLocalVariables(Nx, Ny, p, rank);
 
     solver->PrintConfiguration();
 
     solver->Initialise();
+
+    solver->GetInfoMPI(cart_comm, rank, size, coords, p);
 
     solver->WriteSolution("TestInputLidDrivenCavity.txt");
 
@@ -92,6 +117,10 @@ BOOST_AUTO_TEST_CASE(LidDrivenCavitySolver_file_comparison) {
     solver->WriteSolution("TestOutputLidDrivenCavity.txt");
 
     delete solver; // Release the allocated memory
+
+    // Finalise MPI
+    MPI_Comm_free(&cart_comm);
+    MPI_Finalize();
 
     cout << "Testing input files for LidDrivenCavity: " << endl;
     BOOST_CHECK(compareFiles("TestInputLidDrivenCavity.txt", "BaselineInputLidDrivenCavity.txt"));

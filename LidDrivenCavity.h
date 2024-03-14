@@ -60,6 +60,11 @@ private:
     int end_x;
     int start_y;
     int end_y;
+
+    double dxi;
+    double dyi;
+    double dx2i;
+    double dy2i;
     
     SolverCG* cg = nullptr;
     SolverCG* cg_whole = nullptr;
@@ -67,5 +72,7 @@ private:
     void CleanUp();
     void UpdateDxDy();
     void Advance();
+    void InteriorVorticity(int startX, int endX, int startY, int endY);
+    void TimeAdvanceVorticity(int startX, int endX, int startY, int endY);
 };
 

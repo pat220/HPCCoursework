@@ -70,19 +70,16 @@ private:
     SolverCG* cg = nullptr;
     SolverCG* cg_whole = nullptr;
 
-    double* sendBufferTopV = nullptr;
-    double* sendBufferBottomV = nullptr;
-    double* sendBufferLeftV = nullptr;
-    double* sendBufferRightV = nullptr;
+    double* sendBufferTop = nullptr;
+    double* sendBufferBottom = nullptr;
+    double* sendBufferLeft = nullptr;
+    double* sendBufferRight = nullptr;
+
     double* receiveBufferTopV = nullptr;
     double* receiveBufferBottomV = nullptr;
     double* receiveBufferLeftV = nullptr;
     double* receiveBufferRightV = nullptr;
 
-    double* sendBufferTopS = nullptr;
-    double* sendBufferBottomS = nullptr;
-    double* sendBufferLeftS = nullptr;
-    double* sendBufferRightS = nullptr;
     double* receiveBufferTopS = nullptr;
     double* receiveBufferBottomS = nullptr;
     double* receiveBufferLeftS = nullptr;
@@ -92,8 +89,7 @@ private:
     void CleanUpBuffers();
     void UpdateDxDy();
     void Advance();
-    void SendReceiveEdgesV(double* varArray);
-    void SendReceiveEdgesS(double* varArray);
+    void SendReceiveEdges(double* varArray, double* receiveBufferTop, double* receiveBufferBottom, double* receiveBufferLeft, double* receiveBufferRight);
     void InteriorVorticity(int startX, int endX, int startY, int endY);
     void TimeAdvanceVorticity(int startX, int endX, int startY, int endY);
 };

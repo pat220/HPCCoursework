@@ -106,9 +106,9 @@ void LidDrivenCavity::Integrate()
     int NSteps = ceil(T / dt);
     for (int t = 0; t < 1; ++t) // NSteps; ++t)
     {
-        std::cout << "Step: " << setw(8) << t
-                  << "  Time: " << setw(8) << t * dt
-                  << std::endl;
+        // std::cout << "Step: " << setw(8) << t
+        //           << "  Time: " << setw(8) << t * dt
+        //           << std::endl;
         Advance();
     }
 }
@@ -287,58 +287,89 @@ void LidDrivenCavity::Advance()
     }
 
 
-    // Paralleslised interior vorticity:
-    // Compute interior vorticity
-    // Interior processes
-    if (!(coords[0] == 0 || coords[0] == p - 1) && !(coords[1] == 0 || coords[1] == p - 1))
-    {
-        InteriorVorticity(0, Nx_local, 0, Ny_local);
-    }
+    int x_start = coords[1] == 0 ? 1 : 0;
+    int x_end = coords[1] == p - 1 ? Ny_local - 1 : Ny_local;
+    int y_start = coords[0] == 0 ? 1 : 0;
+    int y_end = coords[0] == p - 1 ? Nx_local - 1 : Nx_local;
 
-    // Corner processes
-    if (coords[0] == 0 && coords[1] == 0) // Top left corner
-    {
-        InteriorVorticity(1, Nx_local, 1, Ny_local);
-    }
-    else if (coords[0] == 0 && coords[1] == p - 1) // Top right corner
-    {
-        InteriorVorticity(0, Nx_local - 1, 1, Ny_local);
-    }
-    else if (coords[0] == p - 1 && coords[1] == 0) // Bottom left corner
-    {
-        InteriorVorticity(1, Nx_local, 0, Ny_local - 1);
-    }
-    else if (coords[0] == p - 1 && coords[1] == p - 1) // Bottom right corner
-    {
-        InteriorVorticity(0, Nx_local - 1, 0, Ny_local - 1);
-    }
+    // cout << "Rank " << rank << " x_start: " << x_start << " x_end: " << x_end << " y_start: " << y_start << " y_end: " << y_end << endl;
 
-    // It runs well until here
+    // MPI_Barrier(cart_comm);
+    InteriorVorticity(x_start, x_end, y_start, y_end);
+
+    MPI_Barrier(cart_comm);
+    TimeAdvanceVorticity(x_start, x_end, y_start, y_end);
+
+    // // Paralleslised interior vorticity:
+    // // Compute interior vorticity
+    // // Interior processes
+    // if (!(coords[0] == 0 || coords[0] == p - 1) && !(coords[1] == 0 || coords[1] == p - 1))
+    // {
+    //     InteriorVorticity(0, Nx_local, 0, Ny_local);
+    // }
+
+    // // Edge processes, not corners
+    // if (coords[0] == 0 && !(coords[1] == 0 || coords[1] == p - 1))
+    // {
+    //     InteriorVorticity(0, Nx_local, 1, Ny_local);
+    // }
+    // else if (coords[0] == p - 1 && !(coords[1] == 0 || coords[1] == p - 1))
+    // {
+    //     InteriorVorticity(0, Nx_local, 0, Ny_local - 1);
+    // }
+    // else if (coords[1] == 0 && !(coords[0] == 0 || coords[0] == p - 1))
+    // {
+    //     InteriorVorticity(1, Nx_local, 0, Ny_local);
+    // }
+    // else if (coords[1] == p - 1 && !(coords[0] == 0 || coords[0] == p - 1))
+    // {
+    //     InteriorVorticity(0, Nx_local - 1, 0, Ny_local);
+    // }
+
+    // // Corner processes
+    // if (coords[0] == 0 && coords[1] == 0) // Top left corner
+    // {
+    //     InteriorVorticity(1, Nx_local, 1, Ny_local);
+    // }
+    // else if (coords[0] == 0 && coords[1] == p - 1) // Top right corner
+    // {
+    //     InteriorVorticity(0, Nx_local - 1, 1, Ny_local);
+    // }
+    // else if (coords[0] == p - 1 && coords[1] == 0) // Bottom left corner
+    // {
+    //     InteriorVorticity(1, Nx_local, 0, Ny_local - 1);
+    // }
+    // else if (coords[0] == p - 1 && coords[1] == p - 1) // Bottom right corner
+    // {
+    //     InteriorVorticity(0, Nx_local - 1, 0, Ny_local - 1);
+    // }
+
+    // // It runs well until here but get deadlock
 
     // Time advance vorticity
     // Interior processes
-    if (!(coords[0] == 0 || coords[0] == p - 1) && !(coords[1] == 0 || coords[1] == p - 1))
-    {
-        TimeAdvanceVorticity(0, Nx_local, 0, Ny_local);
-    }
+    // if (!(coords[0] == 0 || coords[0] == p - 1) && !(coords[1] == 0 || coords[1] == p - 1))
+    // {
+    //     TimeAdvanceVorticity(0, Nx_local, 0, Ny_local);
+    // }
 
-    // Corners
-    if (coords[0] == 0 && coords[1] == 0) // Top left corner
-    {
-        TimeAdvanceVorticity(1, Nx_local, 1, Ny_local);
-    }
-    else if (coords[0] == 0 && coords[1] == p - 1) // Top right corner
-    {
-        TimeAdvanceVorticity(0, Nx_local - 1, 1, Ny_local);
-    }
-    else if (coords[0] == p - 1 && coords[1] == 0) // Bottom left corner
-    {
-        TimeAdvanceVorticity(1, Nx_local, 0, Ny_local - 1);
-    }
-    else if (coords[0] == p - 1 && coords[1] == p - 1) // Bottom right corner
-    {
-        TimeAdvanceVorticity(0, Nx_local - 1, 0, Ny_local - 1);
-    }
+    // // Corners
+    // if (coords[0] == 0 && coords[1] == 0) // Top left corner
+    // {
+    //     TimeAdvanceVorticity(1, Nx_local, 1, Ny_local);
+    // }
+    // else if (coords[0] == 0 && coords[1] == p - 1) // Top right corner
+    // {
+    //     TimeAdvanceVorticity(0, Nx_local - 1, 1, Ny_local);
+    // }
+    // else if (coords[0] == p - 1 && coords[1] == 0) // Bottom left corner
+    // {
+    //     TimeAdvanceVorticity(1, Nx_local, 0, Ny_local - 1);
+    // }
+    // else if (coords[0] == p - 1 && coords[1] == p - 1) // Bottom right corner
+    // {
+    //     TimeAdvanceVorticity(0, Nx_local - 1, 0, Ny_local - 1);
+    // }
 
     cg->Solve(v, s);
     
@@ -375,25 +406,20 @@ void LidDrivenCavity::Advance()
 
 void LidDrivenCavity::InitialiseBuffers()
 {
-    if (sendBufferTopV)
+    if (sendBufferTop)
     {
         CleanUpBuffers();
     }
 
-    sendBufferTopV = new double[Nx_local];
-    sendBufferBottomV = new double[Nx_local];
-    sendBufferLeftV = new double[Ny_local];
-    sendBufferRightV = new double[Ny_local];
+    sendBufferTop = new double[Nx_local];
+    sendBufferBottom = new double[Nx_local];
+    sendBufferLeft = new double[Ny_local];
+    sendBufferRight = new double[Ny_local];
 
     receiveBufferTopV = new double[Nx_local];
     receiveBufferBottomV = new double[Nx_local];
     receiveBufferLeftV = new double[Ny_local];
     receiveBufferRightV = new double[Ny_local];
-
-    sendBufferTopS = new double[Nx_local];
-    sendBufferBottomS = new double[Nx_local];
-    sendBufferLeftS = new double[Ny_local];
-    sendBufferRightS = new double[Ny_local];
 
     receiveBufferTopS = new double[Nx_local];
     receiveBufferBottomS = new double[Nx_local];
@@ -404,21 +430,18 @@ void LidDrivenCavity::InitialiseBuffers()
 
 void LidDrivenCavity::CleanUpBuffers()
 {
-    if (sendBufferTopV)
+    if (sendBufferTop)
     {
-        delete[] sendBufferTopV;
-        delete[] sendBufferBottomV;
-        delete[] sendBufferLeftV;
-        delete[] sendBufferRightV;
+        delete[] sendBufferTop;
+        delete[] sendBufferBottom;
+        delete[] sendBufferLeft;
+        delete[] sendBufferRight;
+
         delete[] receiveBufferTopV;
         delete[] receiveBufferBottomV;
         delete[] receiveBufferLeftV;
         delete[] receiveBufferRightV;
 
-        delete[] sendBufferTopS;
-        delete[] sendBufferBottomS;
-        delete[] sendBufferLeftS;
-        delete[] sendBufferRightS;
         delete[] receiveBufferTopS;
         delete[] receiveBufferBottomS;
         delete[] receiveBufferLeftS;
@@ -426,81 +449,86 @@ void LidDrivenCavity::CleanUpBuffers()
     }
 }
 
-void LidDrivenCavity::SendReceiveEdgesV(double* varArray)
+void LidDrivenCavity::SendReceiveEdges(double* varArray, double* receiveBufferTop, double* receiveBufferBottom, double* receiveBufferLeft, double* receiveBufferRight)
 {
+    int bottomRank, topRank, rightRank, leftRank;
+    MPI_Cart_shift(cart_comm, 0, 1, &topRank, &bottomRank);
+    MPI_Cart_shift(cart_comm, 1, 1, &leftRank, &rightRank);
+    MPI_Request request;
 
-    int destVertical, sourceVertical, destHorizontal, sourceHorizontal;
-    MPI_Cart_shift(cart_comm, 0, 1, &sourceVertical, &destVertical);
-    MPI_Cart_shift(cart_comm, 1, 1, &sourceHorizontal, &destHorizontal);
 
-    if (destVertical != MPI_PROC_NULL) {
-        // Send data to bottom members - receive from top [2]
+
+    if (bottomRank != MPI_PROC_NULL) {
+        // Send data to bottom members
         for (int i = 0; i < Nx_local; ++i) {
-            sendBufferBottomV[i] = varArray[IDX(i, end_y)];
+            sendBufferBottom[i] = varArray[IDX(i, end_y)];
         }
-        MPI_Sendrecv(&sendBufferBottomV, Nx_local, MPI_DOUBLE, destVertical, 0, &receiveBufferTopV, Nx_local, MPI_DOUBLE, destVertical, 0, cart_comm, MPI_STATUS_IGNORE);
+        // cout << "Rank " << rank << " sending to bottom" << endl;
+        MPI_Isend(sendBufferBottom, Nx_local, MPI_DOUBLE, bottomRank, 0, cart_comm, &request);
     }
-    else if (sourceVertical != MPI_PROC_NULL) {
-        // Send data to top members - receive from bottom [3]
-        for (int i = 0; i < Nx_local; ++i) {
-            sendBufferTopV[i] = varArray[IDX(i, start_y)];
-        }
-        MPI_Sendrecv(sendBufferTopV, Nx_local, MPI_DOUBLE, sourceVertical, 0, receiveBufferBottomV, Nx_local, MPI_DOUBLE, sourceVertical, 0, cart_comm, MPI_STATUS_IGNORE);
+    if (topRank != MPI_PROC_NULL) {
+        // Receive data from top members 
+        MPI_Irecv(receiveBufferTop, Nx_local, MPI_DOUBLE, topRank, 0, cart_comm, &request);
     }
+    // cout << "Rank " << rank << " received from top" << endl;
+    // MPI_Wait(&request, MPI_STATUS_IGNORE);
     
-    if (destHorizontal != MPI_PROC_NULL) {
-        // Send data to right members - receive from left [0]
-        for (int j = 0; j < Ny_local; ++j) {
-            sendBufferRightV[j] = varArray[IDX(end_x, j)];
-        }
-        MPI_Sendrecv(sendBufferRightV, Ny_local, MPI_DOUBLE, destHorizontal, 0, receiveBufferLeftV, Ny_local, MPI_DOUBLE, destHorizontal, 0, cart_comm, MPI_STATUS_IGNORE);
-    }
-    else if (sourceHorizontal != MPI_PROC_NULL) {
-        // Send data to left members - receive from right [1]
-        for (int j = 0; j < Ny_local; ++j) {
-            sendBufferLeftV[j] = varArray[IDX(start_x, j)];
-        }
-        MPI_Sendrecv(sendBufferLeftV, Ny_local, MPI_DOUBLE, sourceHorizontal, 0, receiveBufferRightV, Ny_local, MPI_DOUBLE, sourceHorizontal, 0, cart_comm, MPI_STATUS_IGNORE);
-    }
-
-}
-
-void LidDrivenCavity::SendReceiveEdgesS(double* varArray)
-{
-
-    int destVertical, sourceVertical, destHorizontal, sourceHorizontal;
-    MPI_Cart_shift(cart_comm, 0, 1, &sourceVertical, &destVertical);
-    MPI_Cart_shift(cart_comm, 1, 1, &sourceHorizontal, &destHorizontal);
-
-    if (destVertical != MPI_PROC_NULL) {
-        // Send data to bottom members - receive from top [2]
+    if (topRank != MPI_PROC_NULL) {
+        // Send data to top members - receive from bottom
         for (int i = 0; i < Nx_local; ++i) {
-            sendBufferBottomS[i] = varArray[IDX(i, end_y)];
+            sendBufferTop[i] = varArray[IDX(i, start_y)];
         }
-        MPI_Sendrecv(sendBufferBottomS, Nx_local, MPI_DOUBLE, destVertical, 0, receiveBufferTopS, Nx_local, MPI_DOUBLE, destVertical, 0, cart_comm, MPI_STATUS_IGNORE);
+        // cout << "Rank " << rank << " sending to top" << endl;
+        MPI_Isend(sendBufferTop, Nx_local, MPI_DOUBLE, topRank, 0, cart_comm, &request);
     }
-    else if (sourceVertical != MPI_PROC_NULL) {
-        // Send data to top members - receive from bottom [3]
-        for (int i = 0; i < Nx_local; ++i) {
-            sendBufferTopS[i] = varArray[IDX(i, start_y)];
+    if (bottomRank != MPI_PROC_NULL) {
+        // Receive data from bottom members 
+        MPI_Irecv(receiveBufferBottom, Nx_local, MPI_DOUBLE, bottomRank, 0, cart_comm, &request);
+    }
+    // cout << "Rank " << rank << " received from bottom" << endl;
+    // MPI_Wait(&request, MPI_STATUS_IGNORE);
+    
+    if (rightRank != MPI_PROC_NULL) {
+        // Send data to right members - receive from left
+        for (int j = 0; j < Ny_local; ++j) {
+            sendBufferRight[j] = varArray[IDX(end_x, j)];
         }
-        MPI_Sendrecv(sendBufferTopS, Nx_local, MPI_DOUBLE, sourceVertical, 0, receiveBufferBottomS, Nx_local, MPI_DOUBLE, sourceVertical, 0, cart_comm, MPI_STATUS_IGNORE);
+        MPI_Isend(sendBufferRight, Ny_local, MPI_DOUBLE, rightRank, 0, cart_comm, &request);
     }
+    if (leftRank != MPI_PROC_NULL) {
+        // Receive data from left members 
+        MPI_Irecv(receiveBufferLeft, Ny_local, MPI_DOUBLE, leftRank,0, cart_comm, &request);
+    }
+    // MPI_Wait(&request, MPI_STATUS_IGNORE);
+
+    if (leftRank != MPI_PROC_NULL) {
+        // Send data to left members - receive from right
+        for (int j = 0; j < Ny_local; ++j) {
+            sendBufferLeft[j] = varArray[IDX(start_x, j)];
+        }
+        MPI_Isend(sendBufferLeft, Ny_local, MPI_DOUBLE, leftRank, 0, cart_comm, &request);
+    }
+    if (rightRank != MPI_PROC_NULL) {
+        // Receive data from right members 
+        MPI_Irecv(receiveBufferRight, Ny_local, MPI_DOUBLE, rightRank, 0, cart_comm, &request);
+    }
+
+    MPI_Wait(&request, MPI_STATUS_IGNORE);
 
 }
 
 void LidDrivenCavity::InteriorVorticity(int startX, int endX, int startY, int endY)
 {
     // Send and receive the edges of the local domain
-    SendReceiveEdgesV(v);
+    SendReceiveEdges(s, receiveBufferTopS, receiveBufferBottomS, receiveBufferLeftS, receiveBufferRightS);
 
     // Update the vorticity values using the received data
     for (int i = startX; i < endX; ++i) {
         for (int j = startY; j < endY; ++j) {
-            double leftNeighborValue = (coords[0] > 0) ? receiveBufferLeftV[j - startY] : s[IDX(i - 1, j)];
-            double rightNeighborValue = (coords[0] < p - 1) ? receiveBufferRightV[j - startY] : s[IDX(i + 1, j)];
-            double botomNeighborValue = (coords[1] < p - 1) ? receiveBufferBottomV[i - startX] : s[IDX(i, j + 1)];
-            double topNeighborValue = (coords[1] > 0) ? receiveBufferTopV[i - startX] : s[IDX(i, j - 1)];
+            double leftNeighborValue = (coords[0] > 0) ? receiveBufferLeftS[j - startY] : s[IDX(i - 1, j)];
+            double rightNeighborValue = (coords[0] < p - 1) ? receiveBufferRightS[j - startY] : s[IDX(i + 1, j)];
+            double botomNeighborValue = (coords[1] < p - 1) ? receiveBufferBottomS[i - startX] : s[IDX(i, j + 1)];
+            double topNeighborValue = (coords[1] > 0) ? receiveBufferTopS[i - startX] : s[IDX(i, j - 1)];
             
             v[IDX(i,j)] = dx2i * (2.0 * s[IDX(i,j)] - rightNeighborValue - leftNeighborValue)
                         + 1.0/dy/dy * (2.0 * s[IDX(i,j)] - botomNeighborValue - topNeighborValue);
@@ -511,8 +539,8 @@ void LidDrivenCavity::InteriorVorticity(int startX, int endX, int startY, int en
 void LidDrivenCavity::TimeAdvanceVorticity(int startX, int endX, int startY, int endY)
 {
     // Send and receive the edges of the local domain
-    SendReceiveEdgesV(v);
-    SendReceiveEdgesS(s);
+    SendReceiveEdges(v, receiveBufferTopV, receiveBufferBottomV, receiveBufferLeftV, receiveBufferRightV);
+    SendReceiveEdges(s, receiveBufferTopS, receiveBufferBottomS, receiveBufferLeftS, receiveBufferRightS);
 
     // Update the vorticity values using the received data
     for (int i = startX; i < endX; ++i)

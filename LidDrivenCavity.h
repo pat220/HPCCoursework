@@ -6,6 +6,7 @@ using namespace std;
 #include "mpi.h"
 
 class SolverCG;
+class MPIGridCommunicator;
 
 class LidDrivenCavity
 {
@@ -18,14 +19,12 @@ public:
     void SetTimeStep(double deltat);
     void SetFinalTime(double finalt);
     void SetReynoldsNumber(double Re);
-    void SetLocalVariables(int Nx, int Ny, int p, int rank);
+    void SetLocalVariables(int Nx, int Ny, int p, int *coords);
 
-    void Initialise();
-    void InitialiseBuffers();
+    void Initialise(MPI_Comm comm, int *coords, int p);
     void Integrate();
     void WriteSolution(std::string file);
     void PrintConfiguration();
-    void GetInfoMPI(MPI_Comm comm, int rank, int size, int* coords, int p);
 
 private:
     double* v   = nullptr;
@@ -50,7 +49,7 @@ private:
 
     double rank = 0; // MPI rank default value
     double size = 0; // MPI size default value
-    MPI_Comm cart_comm = MPI_COMM_NULL;
+    
     int* coords = nullptr;
     int p = 1;
 
@@ -69,11 +68,7 @@ private:
     
     SolverCG* cg = nullptr;
     SolverCG* cg_whole = nullptr;
-
-    double* sendBufferTop = nullptr;
-    double* sendBufferBottom = nullptr;
-    double* sendBufferLeft = nullptr;
-    double* sendBufferRight = nullptr;
+    MPIGridCommunicator* mpiGridCommunicator = nullptr;
 
     double* receiveBufferTopV = nullptr;
     double* receiveBufferBottomV = nullptr;
@@ -87,6 +82,7 @@ private:
 
     void CleanUp();
     void CleanUpBuffers();
+    void InitialiseBuffers();
     void UpdateDxDy();
     void Advance();
     void SendReceiveEdges(double* varArray, double* receiveBufferTop, double* receiveBufferBottom, double* receiveBufferLeft, double* receiveBufferRight);

@@ -3,151 +3,277 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <cmath>
 
+class MPIGridCommunicator;
 using namespace std;
 
 #include <cblas.h>
-
+#include "mpi.h"
 #include "SolverCG.h"
+#include "MPIGridCommunicator.h"
 
-#define IDX(I,J) ((J)*Nx + (I))
+#define IDX(I, J) ((J) * Nx_local + (I))
+#define IDX_GLOBAL(I, J) ((J) * Nx + (I))
 
-SolverCG::SolverCG(int pNx, int pNy, double pdx, double pdy)
+SolverCG::SolverCG(int pNx, int pNy, double pdx, double pdy, MPIGridCommunicator* mpiGridCommunicator)
+    : p(mpiGridCommunicator->p), coords(mpiGridCommunicator->coords), mpiGridCommunicator(mpiGridCommunicator)
 {
     dx = pdx;
     dy = pdy;
     Nx = pNx;
     Ny = pNy;
+    Nx_local = mpiGridCommunicator->Nx_local;
+    Ny_local = mpiGridCommunicator->Ny_local;
     int n = Nx*Ny;
+
     r = new double[n];
-    p = new double[n];
+    k = new double[n];
     z = new double[n];
     t = new double[n]; //temp
-}
 
+    InitialiseBuffers();
+
+}
 
 SolverCG::~SolverCG()
 {
     delete[] r;
-    delete[] p;
+    delete[] k;
     delete[] z;
     delete[] t;
 }
 
-
 void SolverCG::Solve(double* b, double* x) {
-    unsigned int n = Nx*Ny;
-    int k;
+    unsigned int n = Nx_local*Ny_local;
+    int g;
     double alpha;
     double beta;
     double eps;
     double tol = 0.001;
 
-    eps = cblas_dnrm2(n, b, 1);
+    // for (int i = 0; i < n; ++i) {
+    //     cout << "b[" << i << "] = " << b[i] << " ";
+    // } cout << endl;
+    // for (int i = 0; i < n; ++i) {
+    //     cout << "x[" << i << "] = " << x[i] << " ";
+    // } cout << endl; // all my x are zeros now
+
+    double dot_local = cblas_ddot(n, b, 1, b, 1);
+    double dot_global;
+
+    // Reduce SUM to compute global dot of b and x and sqrt them
+    MPI_Allreduce(&dot_local, &dot_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+    eps = sqrt(dot_global);
+
+    int rank;
+    MPI_Comm_rank(mpiGridCommunicator->cart_comm, &rank);
     if (eps < tol*tol) {
         std::fill(x, x+n, 0.0);
         cout << "Norm is " << eps << endl;
         return;
     }
 
-    ApplyOperator(x, t);
+    ApplyOperator(x, t); // parallelised inside
+    // for (int i = 0; i < n; ++i) {
+    //     cout << "t[" << i << "] = " << t[i] << " ";
+    // } cout << endl;
+
     cblas_dcopy(n, b, 1, r, 1);        // r_0 = b (i.e. b)
-    ImposeBC(r);
+    ImposeBC(r); // parallelised inside
 
     cblas_daxpy(n, -1.0, t, 1, r, 1);
-    Precondition(r, z);
-    cblas_dcopy(n, z, 1, p, 1);        // p_0 = r_0
+    Precondition(r, z); // parallelised inside
+    cblas_dcopy(n, z, 1, k, 1);        // p_0 = r_0
 
-    k = 0;
+    g = 0;
     do {
-        k++;
+        g++;
         // Perform action of Nabla^2 * p
-        ApplyOperator(p, t);
+        ApplyOperator(k, t); // parallelised inside
+        // cout << rank << " t  is going to be: in g = " << g << endl;
+        // for (int i = 0; i < n; ++i) {
+        //     cout << "t[" << i << "] = " << t[i] << " ";
+        // } cout << endl;
 
-        alpha = cblas_ddot(n, t, 1, p, 1);  // alpha = p_k^T A p_k
+        alpha = cblas_ddot(n, t, 1, k, 1);  // alpha = p_k^T A p_k
+        MPI_Allreduce(&alpha, &alpha, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+        // cout << rank << " alpha is going to be: in g = " << alpha << endl;
+
         alpha = cblas_ddot(n, r, 1, z, 1) / alpha; // compute alpha_k
-        beta  = cblas_ddot(n, r, 1, z, 1);  // z_k^T r_k
+        MPI_Allreduce(&alpha, &alpha, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+        // cout << rank << " alpha2 is: in g = " << alpha << endl;
 
-        cblas_daxpy(n,  alpha, p, 1, x, 1);  // x_{k+1} = x_k + alpha_k p_k
+        beta  = cblas_ddot(n, r, 1, z, 1);  // z_k^T r_k
+        MPI_Allreduce(&beta, &beta, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+        // cout << rank << " beta is: in g = " << beta << endl;
+
+        cblas_daxpy(n,  alpha, k, 1, x, 1);  // x_{k+1} = x_k + alpha_k p_k
         cblas_daxpy(n, -alpha, t, 1, r, 1); // r_{k+1} = r_k - alpha_k A p_k
 
-        eps = cblas_dnrm2(n, r, 1);
+        // Compute local to global 2norm with dot products
+        dot_local = cblas_ddot(n, r, 1, r, 1);
+        MPI_Allreduce(&dot_local, &dot_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+        eps = sqrt(dot_global);
+        if (rank == 0){cout << "Norm is " << eps << endl;}
 
         if (eps < tol*tol) {
             break;
         }
         Precondition(r, z);
+
         beta = cblas_ddot(n, r, 1, z, 1) / beta;
+        MPI_Allreduce(&beta, &beta, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+        // cout << rank << " beta2 is: in g = " << beta << endl;
 
         cblas_dcopy(n, z, 1, t, 1);
-        cblas_daxpy(n, beta, p, 1, t, 1);
-        cblas_dcopy(n, t, 1, p, 1);
+        cblas_daxpy(n, beta, k, 1, t, 1);
+        cblas_dcopy(n, t, 1, k, 1);
 
-    } while (k < 5000); // Set a maximum number of iterations
+    } while (g < 5000); // Set a maximum number of iterations
 
-    if (k == 5000) {
-        cout << "FAILED TO CONVERGE" << endl;
+    if (g == 5000) {
+        if (rank == 0){cout << "FAILED TO CONVERGE" << endl;}
         exit(-1);
     }
 
-    cout << "Converged in " << k << " iterations. eps = " << eps << endl;
-
+    if (rank == 0){cout << "Converged in " << g << " iterations. eps = " << eps << endl;}
 
 }
-
 
 void SolverCG::ApplyOperator(double* in, double* out) {
+    
     // Assume ordered with y-direction fastest (column-by-column)
+    int start_x = mpiGridCommunicator->start_x;
+    int end_x = mpiGridCommunicator->end_x;
+    int start_y = mpiGridCommunicator->start_y;
+    int end_y = mpiGridCommunicator->end_y;
+    
+    mpiGridCommunicator->SendReceiveEdges(in, receiveBufferTopV, receiveBufferBottomV, receiveBufferLeftV, receiveBufferRightV);
+
     double dx2i = 1.0/dx/dx;
     double dy2i = 1.0/dy/dy;
-    int jm1 = 0, jp1 = 2;
-    for (int j = 1; j < Ny - 1; ++j) {
-        for (int i = 1; i < Nx - 1; ++i) {
-            out[IDX(i,j)] = ( -     in[IDX(i-1, j)]
+    for (int j = start_y; j < end_y; ++j) {
+        for (int i = start_x; i < end_x; ++i) {
+
+            double leftNeighborValueV = (coords[0] > 0) ? receiveBufferLeftV[j - start_y] : in[IDX(i - 1, j)];
+            double rightNeighborValueV = (coords[0] < p - 1) ? receiveBufferRightV[j - start_y] : in[IDX(i + 1, j)];
+            double botomNeighborValueV = (coords[1] < p - 1) ? receiveBufferBottomV[i - start_x] : in[IDX(i, j + 1)];
+            double topNeighborValueV = (coords[1] > 0) ? receiveBufferTopV[i - start_x] : in[IDX(i, j - 1)];
+            
+            out[IDX(i,j)] = ( -     leftNeighborValueV
                               + 2.0*in[IDX(i,   j)]
-                              -     in[IDX(i+1, j)])*dx2i
-                          + ( -     in[IDX(i, jm1)]
+                              -     rightNeighborValueV)*dx2i
+                          + ( -     topNeighborValueV
                               + 2.0*in[IDX(i,   j)]
-                              -     in[IDX(i, jp1)])*dy2i;
+                              -     botomNeighborValueV)*dy2i;
         }
-        jm1++;
-        jp1++;
     }
 }
-
 
 void SolverCG::Precondition(double* in, double* out) {
     int i, j;
     double dx2i = 1.0/dx/dx;
     double dy2i = 1.0/dy/dy;
     double factor = 2.0*(dx2i + dy2i);
-    for (i = 1; i < Nx - 1; ++i) {
-        for (j = 1; j < Ny - 1; ++j) {
+
+    int start_x = mpiGridCommunicator->start_x;
+    int end_x = mpiGridCommunicator->end_x;
+    int start_y = mpiGridCommunicator->start_y;
+    int end_y = mpiGridCommunicator->end_y;
+
+    for (i = start_x; i < end_x; ++i) {
+        for (j = start_y; j < end_y; ++j) {
             out[IDX(i,j)] = in[IDX(i,j)]/factor;
         }
     }
-    // Boundaries
-    for (i = 0; i < Nx; ++i) {
-        out[IDX(i, 0)] = in[IDX(i,0)];
-        out[IDX(i, Ny-1)] = in[IDX(i, Ny-1)];
-    }
 
-    for (j = 0; j < Ny; ++j) {
-        out[IDX(0, j)] = in[IDX(0, j)];
-        out[IDX(Nx - 1, j)] = in[IDX(Nx - 1, j)];
+    // Boundaries
+    if (coords[0] == 0)
+    {
+        for (int i = 0; i < Nx_local; ++i) {
+            out[IDX(i, 0)] = in[IDX(i,0)];
+        }
+    }
+    else if (coords[0] == p - 1)
+    {
+        for (int i = 0; i < Nx_local; ++i) {
+            out[IDX(i, Ny-1)] = in[IDX(i, Ny-1)];
+        }
+    }
+    
+    if (coords[1] == 0)
+    {
+        for (int j = 0; j < Ny_local; ++j) {
+            out[IDX(0, j)] = in[IDX(0, j)];
+        }
+    }
+    else if (coords[1] == p - 1)
+    {
+        for (int j = 0; j < Ny_local; ++j) {
+            out[IDX(Nx - 1, j)] = in[IDX(Nx - 1, j)];
+        }
+    }
+}
+
+void SolverCG::InitialiseBuffers()
+{
+    CleanUpBuffers();
+
+    receiveBufferTopV = new double[Nx_local];
+    receiveBufferBottomV = new double[Nx_local];
+    receiveBufferLeftV = new double[Ny_local];
+    receiveBufferRightV = new double[Ny_local];
+
+    receiveBufferTopS = new double[Nx_local];
+    receiveBufferBottomS = new double[Nx_local];
+    receiveBufferLeftS = new double[Ny_local];
+    receiveBufferRightS = new double[Ny_local];
+
+}
+
+void SolverCG::CleanUpBuffers()
+{
+    if (receiveBufferTopS)
+    {
+        delete[] receiveBufferTopV;
+        delete[] receiveBufferBottomV;
+        delete[] receiveBufferLeftV;
+        delete[] receiveBufferRightV;
+
+        delete[] receiveBufferTopS;
+        delete[] receiveBufferBottomS;
+        delete[] receiveBufferLeftS;
+        delete[] receiveBufferRightS;
     }
 }
 
 void SolverCG::ImposeBC(double* inout) {
-        // Boundaries
-    for (int i = 0; i < Nx; ++i) {
-        inout[IDX(i, 0)] = 0.0;
-        inout[IDX(i, Ny-1)] = 0.0;
-    }
+    // Boundaries
 
-    for (int j = 0; j < Ny; ++j) {
-        inout[IDX(0, j)] = 0.0;
-        inout[IDX(Nx - 1, j)] = 0.0;
+    if (coords[0] == 0)
+    {
+        for (int i = 0; i < Nx_local; ++i) {
+            inout[IDX(i, 0)] = 0.0;
+        }
     }
-
+    else if (coords[0] == p - 1)
+    {
+        for (int i = 0; i < Nx_local; ++i) {
+            inout[IDX(i, Ny_local-1)] = 0.0;
+        }
+    }
+    
+    if (coords[1] == 0)
+    {
+        for (int j = 0; j < Ny_local; ++j) {
+            inout[IDX(0, j)] = 0.0;
+        }
+    }
+    else if (coords[1] == p - 1)
+    {
+        for (int j = 0; j < Ny_local; ++j) {
+            inout[IDX(Nx_local-1, j)] = 0.0;
+        }
+    }
 }

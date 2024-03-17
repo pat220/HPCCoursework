@@ -74,12 +74,9 @@ int main(int argc, char **argv)
     solver->SetTimeStep(vm["dt"].as<double>());
     solver->SetFinalTime(vm["T"].as<double>());
     solver->SetReynoldsNumber(vm["Re"].as<double>());
-    solver->SetLocalVariables(vm["Nx"].as<int>(), vm["Ny"].as<int>(), p, rank);
+    solver->SetLocalVariables(vm["Nx"].as<int>(), vm["Ny"].as<int>(), p, coords);
     
-    solver->Initialise();
-    solver->InitialiseBuffers();
-
-    solver->GetInfoMPI(cart_comm, rank, size, coords, p);
+    solver->Initialise(cart_comm, coords, p);
 
     // solver->WriteSolution("ic.txt");
 

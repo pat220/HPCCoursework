@@ -1,7 +1,7 @@
 CXX = mpicxx
 CXXFLAGS = -std=c++11 -Wall -O2
-HDRS = SolverCG.h LidDrivenCavity.h
-OBJS = SolverCG.o LidDrivenCavity.o
+HDRS = SolverCG.h LidDrivenCavity.h MPIGridCommunicator.h
+OBJS = SolverCG.o LidDrivenCavity.o MPIGridCommunicator.o
 OBJS_MAIN = LidDrivenCavitySolver.o
 OBJS_TESTS = UnitTests.o
 LDLIBS = -llapack -lblas -lboost_program_options -lboost_unit_test_framework

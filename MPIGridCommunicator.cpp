@@ -36,7 +36,7 @@ void MPIGridCommunicator::SendReceiveEdges(const double* varArray, double* recei
     if (bottomRank != MPI_PROC_NULL) {
         // Send data to bottom members
         for (int i = 0; i < Nx_local; ++i) {
-            sendBufferBottom[i] = varArray[IDX(i, end_y)];
+            sendBufferBottom[i] = varArray[IDX(i, 0)];
         }
         MPI_Isend(sendBufferBottom, Nx_local, MPI_DOUBLE, bottomRank, 0, cart_comm, &request);
     } 
@@ -48,7 +48,7 @@ void MPIGridCommunicator::SendReceiveEdges(const double* varArray, double* recei
     if (topRank != MPI_PROC_NULL) {
         // Send data to top members
         for (int i = 0; i < Nx_local; ++i) {
-            sendBufferTop[i] = varArray[IDX(i, start_y)];
+            sendBufferTop[i] = varArray[IDX(i, Ny_local-1)];
         }
         MPI_Isend(sendBufferTop, Nx_local, MPI_DOUBLE, topRank, 0, cart_comm, &request);
     }
@@ -60,7 +60,7 @@ void MPIGridCommunicator::SendReceiveEdges(const double* varArray, double* recei
     if (rightRank != MPI_PROC_NULL) {
         // Send data to right members
         for (int j = 0; j < Ny_local; ++j) {
-            sendBufferRight[j] = varArray[IDX(end_x, j)];
+            sendBufferRight[j] = varArray[IDX(0, j)];
         }
         MPI_Isend(sendBufferRight, Ny_local, MPI_DOUBLE, rightRank, 0, cart_comm, &request);
     }
@@ -72,7 +72,7 @@ void MPIGridCommunicator::SendReceiveEdges(const double* varArray, double* recei
     if (leftRank != MPI_PROC_NULL) {
         // Send data to left members
         for (int j = 0; j < Ny_local; ++j) {
-            sendBufferLeft[j] = varArray[IDX(start_x, j)];
+            sendBufferLeft[j] = varArray[IDX(Nx_local-1, j)];
         }
         MPI_Isend(sendBufferLeft, Ny_local, MPI_DOUBLE, leftRank, 0, cart_comm, &request);
     }

@@ -26,15 +26,10 @@ private:
     
     MPIGridCommunicator* mpiGridCommunicator = nullptr;
 
-    double* receiveBufferTopV = nullptr;
-    double* receiveBufferBottomV = nullptr;
-    double* receiveBufferLeftV = nullptr;
-    double* receiveBufferRightV = nullptr;
-
-    double* receiveBufferTopS = nullptr;
-    double* receiveBufferBottomS = nullptr;
-    double* receiveBufferLeftS = nullptr;
-    double* receiveBufferRightS = nullptr;
+    double* receiveBufferTop = nullptr;
+    double* receiveBufferBottom = nullptr;
+    double* receiveBufferLeft = nullptr;
+    double* receiveBufferRight = nullptr;
 
     void ApplyOperator(double* k, double* t);
     void Precondition(double* k, double* t);

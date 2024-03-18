@@ -28,11 +28,9 @@ public:
 
 private:
     double* v   = nullptr;
+    double* vnew = nullptr;
     double* s   = nullptr;
     double* tmp = nullptr;
-    double* v_whole = nullptr;
-    double* s_whole = nullptr;
-    double* tmp_whole = nullptr;
 
     double dt   = 0.01;
     double T    = 1.0;

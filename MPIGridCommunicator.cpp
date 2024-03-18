@@ -14,8 +14,7 @@ MPIGridCommunicator::MPIGridCommunicator(MPI_Comm comm, int Nx_local, int Ny_loc
     this->sendBufferBottom = new double[Nx_local];
     this->sendBufferLeft = new double[Ny_local];
     this->sendBufferRight = new double[Ny_local];
-
-    // cout << "Rank " << coords[0] << " " << coords[1] << " Nx_local " << Nx_local << " Ny_local " << Ny_local << " start_x " << start_x << " end_x " << end_x << " start_y " << start_y << " end_y " << end_y << endl;
+    
 }
 
 MPIGridCommunicator::~MPIGridCommunicator()

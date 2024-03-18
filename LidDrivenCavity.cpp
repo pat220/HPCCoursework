@@ -3,6 +3,7 @@
 #include <fstream>
 #include <cstring>
 #include <cmath>
+
 using namespace std;
 
 #include <cblas.h>
@@ -63,32 +64,32 @@ void LidDrivenCavity::SetLocalVariables(int Nx, int Ny, int p, int* coords)
     int min_points_y = (Ny - extra_y) / p;
 
     // Calculate the starting and ending points of each process
-    if (coords[0] < extra_x)
+    if (coords[1] < extra_x)
     {
         min_points_x++;
-        this->start_x = rank * min_points_x;
-        this->end_x = (rank + 1) * min_points_x;
-        this->Nx_local = end_x - start_x;
+        int x_first = rank * min_points_x;
+        int x_last = (rank + 1) * min_points_x;
+        this->Nx_local = x_last - x_first;
     }
     else
     {
-        this->start_x = (min_points_x + 1) * extra_x + min_points_x * (rank - extra_x);
-        this->end_x = (min_points_x + 1) * extra_x + min_points_x * (rank - extra_x + 1);
-        this->Nx_local = end_x - start_x;
+        int x_first = (min_points_x + 1) * extra_x + min_points_x * (rank - extra_x);
+        int x_last = (min_points_x + 1) * extra_x + min_points_x * (rank - extra_x + 1);
+        this->Nx_local = x_last - x_first;
     }
 
-    if (coords[1] < extra_y)
+    if (coords[0] < extra_y)
     {
         min_points_y++;
-        this->start_y = rank * min_points_y;
-        this->end_y = (rank + 1) * min_points_y;
-        this->Ny_local = end_y - start_y;
+        int y_first = rank * min_points_y;
+        int y_last = (rank + 1) * min_points_y;
+        this->Ny_local = y_last - y_first;
     }
     else
     {
-        this->start_y = (min_points_y + 1) * extra_y + min_points_y * (rank - extra_y);
-        this->end_y = (min_points_y + 1) * extra_y + min_points_y * (rank - extra_y + 1);
-        this->Ny_local = end_y - start_y;
+        int y_first = (min_points_y + 1) * extra_y + min_points_y * (rank - extra_y);
+        int y_last = (min_points_y + 1) * extra_y + min_points_y * (rank - extra_y + 1);
+        this->Ny_local = y_last - y_first;
     }
 
     UpdateDxDy();
@@ -100,25 +101,20 @@ void LidDrivenCavity::Initialise(MPI_Comm comm, int *coords, int p)
     InitialiseBuffers();
 
     // Set up starting and end points not to include boundaries (0, Nx/Ny)
-    int x_start = coords[1] == 0 ? 1 : 0;
-    int x_end = coords[1] == p - 1 ? Nx_local - 1 : Nx_local;
-    int y_start = coords[0] == 0 ? 1 : 0;
-    int y_end = coords[0] == p - 1 ? Ny_local - 1 : Ny_local;
+    int start_x = coords[1] == 0 ? 1 : 0;
+    int end_x = coords[1] == p - 1 ? Nx_local - 1 : Nx_local;
+    int start_y = coords[0] == p - 1 ? 1 : 0;
+    int end_y = coords[0] == 0 ? Ny_local - 1 : Ny_local;
 
 
-    mpiGridCommunicator = new MPIGridCommunicator(comm, Nx_local, Ny_local, x_start, x_end, y_start, y_end, coords, p);
+    mpiGridCommunicator = new MPIGridCommunicator(comm, Nx_local, Ny_local, start_x, end_x, start_y, end_y, coords, p);
     cg = new SolverCG(Nx_local, Ny_local, dx, dy, mpiGridCommunicator);
-    cg_whole = new SolverCG(Nx, Ny, dx, dy, mpiGridCommunicator);
     this->coords = coords;
     this->p = p;
 
     v = new double[Npts_local](); // local
     s = new double[Npts_local](); // local
     tmp = new double[Npts_local]();
-    
-    v_whole = new double[Npts](); // whole
-    s_whole = new double[Npts](); // whole
-    tmp_whole = new double[Npts]();
 
 
 }
@@ -126,7 +122,7 @@ void LidDrivenCavity::Initialise(MPI_Comm comm, int *coords, int p)
 void LidDrivenCavity::Integrate()
 {
     int NSteps = ceil(T / dt);
-    for (int t = 0; t < 4; ++t) //NSteps; ++t)
+    for (int t = 0; t < NSteps; ++t)
     {
         // std::cout << "Step: " << setw(8) << t
         //           << "  Time: " << setw(8) << t * dt
@@ -223,101 +219,42 @@ void LidDrivenCavity::Advance()
     // Boundary node vorticity
     // Cheking if the process is a corner and take that into account for the starting and end points
     // First checking "insider" ranks within the border of the grid
-    if (coords[0] == 0 && (coords[1] != 0 || coords[1] != p - 1))
-    {
-        for (int i = 0; i < Nx_local; ++i)
-        {
-            // top
-            v[IDX(i, 0)] = 2.0 * dy2i * (s[IDX(i, 0)] - s[IDX(i, 1)]);
-        }
-    }
-    else if (coords[0] == p - 1 && (coords[1] != 0 || coords[1] != p - 1))
-    {
-        for (int i = 0; i < Nx_local; ++i)
-        {
-            // bottom
-            v[IDX(i, Ny_local - 1)] = 2.0 * dy2i * (s[IDX(i, Ny_local - 1)] - s[IDX(i, Ny_local - 2)]) - 2.0 * dyi * U;
-        }
-    }
-    else if (coords[1] == 0 && (coords[0] != 0 || coords[0] != p - 1))
-    {
-        for (int j = 0; j < Ny_local; ++j)
-        {
-            // left
-            v[IDX(0, j)] = 2.0 * dx2i * (s[IDX(0, j)] - s[IDX(1, j)]);
-        }
-    }
-    else if (coords[1] == p - 1 && (coords[0] != 0 || coords[0] != p - 1))
-    {
-        for (int j = 0; j < Ny_local; ++j)
-        {
-            // right
-            v[IDX(Nx_local - 1, j)] = 2.0 * dx2i * (s[IDX(Nx_local - 1, j)] - s[IDX(Nx_local - 2, j)]);
-        }
-    }
-    if (coords[0] == 0 && coords[1] == 0)
-    {
-        for (int i = 1; i < Nx_local; ++i)
-        {
-            // top
-            v[IDX(i, 0)] = 2.0 * dy2i * (s[IDX(i, 0)] - s[IDX(i, 1)]);
-        }
-        for (int j = 1; j < Ny_local; ++j)
-        {
-            // left
-            v[IDX(0, j)] = 2.0 * dx2i * (s[IDX(0, j)] - s[IDX(1, j)]);
-        }
-    }
-    else if (coords[0] == 0 && coords[1] == p - 1)
-    {
-        for (int i = 0; i < Nx_local - 1; ++i)
-        {
-            // top
-            v[IDX(i, 0)] = 2.0 * dy2i * (s[IDX(i, 0)] - s[IDX(i, 1)]);
-        }
-        for (int j = 1; j < Ny_local; ++j)
-        {
-            // right
-            v[IDX(Nx_local - 1, j)] = 2.0 * dx2i * (s[IDX(Nx_local - 1, j)] - s[IDX(Nx_local - 2, j)]);
-        }
-    }
-    else if (coords[0] == p - 1 && coords[1] == 0)
-    {
-        for (int i = 1; i < Nx_local; ++i)
-        {
-            // bottom
-            v[IDX(i, Ny_local - 1)] = 2.0 * dy2i * (s[IDX(i, Ny_local - 1)] - s[IDX(i, Ny_local - 2)]) - 2.0 * dyi * U;
-        }
-        for (int j = 0; j < Ny_local - 1; ++j)
-        {
-            // left
-            v[IDX(0, j)] = 2.0 * dx2i * (s[IDX(0, j)] - s[IDX(1, j)]);
-        }
-    }
-    else if (coords[0] == p - 1 && coords[1] == p - 1)
-    {
-        for (int i = 0; i < Nx_local - 1; ++i)
-        {
-            // bottom
-            v[IDX(i, Ny_local - 1)] = 2.0 * dy2i * (s[IDX(i, Ny_local - 1)] - s[IDX(i, Ny_local - 2)]) - 2.0 * dyi * U;
-        }
-        for (int j = 1; j < Ny_local - 1; ++j)
-        {
-            // right
-            v[IDX(Nx_local - 1, j)] = 2.0 * dx2i * (s[IDX(Nx_local - 1, j)] - s[IDX(Nx_local - 2, j)]);
-        }
-    }
+    NodeVorticity();
 
+    // Start and ending points for the interior vorticity so that it goes from 1 to < Nx/Ny - 1
+    int start_x = mpiGridCommunicator->start_x;
+    int end_x = mpiGridCommunicator->end_x;
+    int start_y = mpiGridCommunicator->start_y;
+    int end_y = mpiGridCommunicator->end_y;
 
-    int x_start = mpiGridCommunicator->start_x;
-    int x_end = mpiGridCommunicator->end_x;
-    int y_start = mpiGridCommunicator->start_y;
-    int y_end = mpiGridCommunicator->end_y;
-
-    InteriorVorticity(x_start, x_end, y_start, y_end);
+    InteriorVorticity(start_x, end_x, start_y, end_y);
 
     MPI_Barrier(mpiGridCommunicator->cart_comm);
-    TimeAdvanceVorticity(x_start, x_end, y_start, y_end);
+    TimeAdvanceVorticity(start_x, end_x, start_y, end_y);
+
+    // Open the file for writing
+    std::ofstream outputFile("testingB.txt", std::ios::app); // Append mode
+
+    // Synchronize the ranks
+    MPI_Barrier(mpiGridCommunicator->cart_comm);
+
+    int rank;
+    MPI_Comm_rank(mpiGridCommunicator->cart_comm, &rank);
+    for (int i = 0; i < mpiGridCommunicator->p*mpiGridCommunicator->p; i++) {
+        if (rank == i) {
+            outputFile << "Values of rank " << rank << ":" << std::endl;
+            for (unsigned int u = 0; u < Nx_local; u++) {
+                for (unsigned int j = 0; j < Ny_local; j++) {
+                    outputFile << v[IDX(u, j)] << " ";
+                }
+                outputFile << std::endl;
+            }
+        }
+        // Synchronize the ranks again
+        MPI_Barrier(mpiGridCommunicator->cart_comm);
+    }
+
+    outputFile.close(); // Close the file
 
     // cg->Solve(v, s);
     
@@ -371,18 +308,116 @@ void LidDrivenCavity::CleanUpBuffers()
     }
 }
 
+void LidDrivenCavity::NodeVorticity()
+{   
+    // int rank;
+    // MPI_Comm_rank(mpiGridCommunicator->cart_comm, &rank);
+
+    // cout << "Process " << rank << " coordinates: (" << coords[0] << ", " << coords[1] << ")" << endl;
+    // Corners first
+
+    if (coords[0] == 0 && coords[1] == 0)
+    {
+        for (int i = 1; i < Nx_local; ++i)
+        {
+            // top
+            v[IDX(i, Ny_local - 1)] = 2.0 * dy2i * (s[IDX(i, Ny_local - 1)] - s[IDX(i, Ny_local - 2)]) - 2.0 * dyi * U;
+        }
+        for (int j = 0; j < Ny_local-1; ++j)
+        {
+            // left
+            v[IDX(0, j)] = 2.0 * dx2i * (s[IDX(0, j)] - s[IDX(1, j)]);
+        }
+    }
+    else if (coords[0] == 0 && coords[1] == p - 1)
+    {
+        for (int i = 0; i < Nx_local-1; ++i)
+        {
+            // top
+            v[IDX(i, Ny_local - 1)] = 2.0 * dy2i * (s[IDX(i, Ny_local - 1)] - s[IDX(i, Ny_local - 2)]) - 2.0 * dyi * U;
+        }
+        for (int j = 0; j < Ny_local-1; ++j)
+        {
+            // right
+            v[IDX(Nx_local - 1, j)] = 2.0 * dx2i * (s[IDX(Nx_local - 1, j)] - s[IDX(Nx_local - 2, j)]);
+        }
+    }
+    else if (coords[0] == p - 1 && coords[1] == 0)
+    {
+        for (int i = 1; i < Nx_local; ++i)
+        {
+            // bottom
+            v[IDX(i, 0)] = 2.0 * dy2i * (s[IDX(i, 0)] - s[IDX(i, 1)]);
+        }
+        for (int j = 1; j < Ny_local; ++j)
+        {
+            // left
+            v[IDX(0, j)] = 2.0 * dx2i * (s[IDX(0, j)] - s[IDX(1, j)]);
+        }
+    }
+    else if (coords[0] == p - 1 && coords[1] == p - 1)
+    {
+        for (int i = 0; i < Nx_local-1; ++i)
+        {
+            // bottom
+            v[IDX(i, 0)] = 2.0 * dy2i * (s[IDX(i, 0)] - s[IDX(i, 1)]);
+        }
+        for (int j = 1; j < Ny_local; ++j)
+        {
+            // right
+            v[IDX(Nx_local - 1, j)] = 2.0 * dx2i * (s[IDX(Nx_local - 1, j)] - s[IDX(Nx_local - 2, j)]);
+        }
+    }
+
+    // Edges
+    if (coords[0] == 0 && !(coords[1] == 0 || coords[1] == p - 1))
+    {
+        for (int i = 0; i < Nx_local; ++i)
+        {
+            // top
+            v[IDX(i, Ny_local - 1)] = 2.0 * dy2i * (s[IDX(i, Ny_local - 1)] - s[IDX(i, Ny_local - 2)]) - 2.0 * dyi * U;
+        }
+    }
+    else if (coords[0] == p - 1 && !(coords[1] == 0 || coords[1] == p - 1))
+    {
+        for (int i = 0; i < Nx_local; ++i)
+        {
+            // bottom
+            v[IDX(i, 0)] = 2.0 * dy2i * (s[IDX(i, 0)] - s[IDX(i, 1)]);
+        }
+    }
+    else if (coords[1] == 0 && !(coords[0] == 0 || coords[0] == p - 1))
+    {
+        for (int j = 0; j < Ny_local; ++j)
+        {
+            // left
+            v[IDX(0, j)] = 2.0 * dx2i * (s[IDX(0, j)] - s[IDX(1, j)]);
+        }
+    }
+    else if (coords[1] == p - 1 && !(coords[0] == 0 || coords[0] == p - 1))
+    {
+        for (int j = 0; j < Ny_local; ++j)
+        {
+            // right
+            v[IDX(Nx_local - 1, j)] = 2.0 * dx2i * (s[IDX(Nx_local - 1, j)] - s[IDX(Nx_local - 2, j)]);
+        }
+    }
+
+
+}
+
 void LidDrivenCavity::InteriorVorticity(int startX, int endX, int startY, int endY)
 {
     // Send and receive the edges of the local domain
-    mpiGridCommunicator->SendReceiveEdges(s, receiveBufferTopS, receiveBufferBottomS, receiveBufferLeftS, receiveBufferRightS);
+    mpiGridCommunicator->SendReceiveEdges(s, receiveBufferTopS, receiveBufferBottomS, receiveBufferLeftS, receiveBufferRightS); // Initialised this with S not to store more data
 
     // Update the vorticity values using the received data
     for (int i = startX; i < endX; ++i) {
         for (int j = startY; j < endY; ++j) {
-            double leftNeighborValue = (coords[0] > 0) ? receiveBufferLeftS[j - startY] : s[IDX(i - 1, j)];
-            double rightNeighborValue = (coords[0] < p - 1) ? receiveBufferRightS[j - startY] : s[IDX(i + 1, j)];
-            double botomNeighborValue = (coords[1] < p - 1) ? receiveBufferBottomS[i - startX] : s[IDX(i, j + 1)];
-            double topNeighborValue = (coords[1] > 0) ? receiveBufferTopS[i - startX] : s[IDX(i, j - 1)];
+            double leftNeighborValue = (coords[1] > 0 && i == 0) ? receiveBufferLeftS[j - startY] : s[IDX(i - 1, j)];
+            double rightNeighborValue = (coords[1] < p - 1 && i == Nx_local-1) ? receiveBufferRightS[j - startY] : s[IDX(i + 1, j)];
+            double botomNeighborValue = (coords[0] < p - 1 && j == 0) ? receiveBufferBottomS[i - startX] : s[IDX(i, j - 1)];
+            double topNeighborValue = (coords[0] > 0 && j == Ny_local-1) ? receiveBufferTopS[i - startX] : s[IDX(i, j + 1)];
             
             v[IDX(i,j)] = dx2i * (2.0 * s[IDX(i,j)] - rightNeighborValue - leftNeighborValue)
                         + 1.0/dy/dy * (2.0 * s[IDX(i,j)] - botomNeighborValue - topNeighborValue);
@@ -391,9 +426,13 @@ void LidDrivenCavity::InteriorVorticity(int startX, int endX, int startY, int en
 }
 
 void LidDrivenCavity::TimeAdvanceVorticity(int startX, int endX, int startY, int endY)
-{
+{   
+    // Generate a new double* v1 that is a copy of v with blas dcopy
+    double* v1 = new double[Npts_local];
+    cblas_dcopy(Npts_local, v, 1, v1, 1);
+    
     // Send and receive the edges of the local domain
-    mpiGridCommunicator->SendReceiveEdges(v, receiveBufferTopV, receiveBufferBottomV, receiveBufferLeftV, receiveBufferRightV);
+    mpiGridCommunicator->SendReceiveEdges(v1, receiveBufferTopV, receiveBufferBottomV, receiveBufferLeftV, receiveBufferRightV);
     mpiGridCommunicator->SendReceiveEdges(s, receiveBufferTopS, receiveBufferBottomS, receiveBufferLeftS, receiveBufferRightS);
 
     // Update the vorticity values using the received data
@@ -401,23 +440,23 @@ void LidDrivenCavity::TimeAdvanceVorticity(int startX, int endX, int startY, int
     {
         for (int j = startY; j < endY; ++j)
         {
-            double leftNeighborValueS = (coords[0] > 0) ? receiveBufferLeftS[j - startY] : s[IDX(i - 1, j)];
-            double rightNeighborValueS = (coords[0] < p - 1) ? receiveBufferRightS[j - startY] : s[IDX(i + 1, j)];
-            double botomNeighborValueS = (coords[1] < p - 1) ? receiveBufferBottomS[i - startX] : s[IDX(i, j + 1)];
-            double topNeighborValueS = (coords[1] > 0) ? receiveBufferTopS[i - startX] : s[IDX(i, j - 1)];
+            double leftNeighborValueS = (coords[1] > 0 && i == 0) ? receiveBufferLeftS[j - startY] : s[IDX(i - 1, j)];
+            double rightNeighborValueS = (coords[1] < p - 1 && i == Nx_local-1) ? receiveBufferRightS[j - startY] : s[IDX(i + 1, j)];
+            double botomNeighborValueS = (coords[0] < p - 1 && j == 0) ? receiveBufferBottomS[i - startX] : s[IDX(i, j - 1)];
+            double topNeighborValueS = (coords[0] > 0 && j == Ny_local-1) ? receiveBufferTopS[i - startX] : s[IDX(i, j + 1)];
 
-            double leftNeighborValueV = (coords[0] > 0) ? receiveBufferLeftV[j - startY] : v[IDX(i - 1, j)];
-            double rightNeighborValueV = (coords[0] < p - 1) ? receiveBufferRightV[j - startY] : v[IDX(i + 1, j)];
-            double botomNeighborValueV = (coords[1] < p - 1) ? receiveBufferBottomV[i - startX] : v[IDX(i, j + 1)];
-            double topNeighborValueV = (coords[1] > 0) ? receiveBufferTopV[i - startX] : v[IDX(i, j - 1)];
+            double leftNeighborValueV = (coords[1] > 0 && i == 0) ? receiveBufferLeftV[j - startY] : v1[IDX(i - 1, j)];
+            double rightNeighborValueV = (coords[1] < p - 1 && i == Nx_local-1) ? receiveBufferRightV[j - startY] : v1[IDX(i + 1, j)];
+            double botomNeighborValueV = (coords[0] < p - 1 && j == 0) ? receiveBufferBottomV[i - startX] : v1[IDX(i, j - 1)];
+            double topNeighborValueV = (coords[0] > 0 && j == Ny_local-1) ? receiveBufferTopV[i - startX] : v1[IDX(i, j + 1)];
 
-            v[IDX(i,j)] = v[IDX(i,j)] + dt*(
+            v[IDX(i,j)] = v1[IDX(i,j)] + dt*(
                 ( (rightNeighborValueS - leftNeighborValueS) * 0.5 * dxi
                 *(botomNeighborValueV - topNeighborValueV) * 0.5 * dyi)
             - ( (botomNeighborValueS - topNeighborValueS) * 0.5 * dyi
                 *(rightNeighborValueV - leftNeighborValueV) * 0.5 * dxi)
-            + nu * (rightNeighborValueV - 2.0 * v[IDX(i,j)] + leftNeighborValueV)*dx2i
-            + nu * (botomNeighborValueV - 2.0 * v[IDX(i,j)] + topNeighborValueV)*dy2i);
+            + nu * (rightNeighborValueV - 2.0 * v1[IDX(i,j)] + leftNeighborValueV)*dx2i
+            + nu * (botomNeighborValueV - 2.0 * v1[IDX(i,j)] + topNeighborValueV)*dy2i);
         }
     }
 }

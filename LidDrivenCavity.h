@@ -56,10 +56,6 @@ private:
     int Nx_local = Nx;
     int Ny_local = Ny;
     int Npts_local = Npts;
-    int start_x = 0;
-    int end_x = 0;
-    int start_y = 0;
-    int end_y = 0;
 
     double dxi;
     double dyi;
@@ -85,7 +81,7 @@ private:
     void InitialiseBuffers();
     void UpdateDxDy();
     void Advance();
-    void SendReceiveEdges(double* varArray, double* receiveBufferTop, double* receiveBufferBottom, double* receiveBufferLeft, double* receiveBufferRight);
+    void NodeVorticity();
     void InteriorVorticity(int startX, int endX, int startY, int endY);
     void TimeAdvanceVorticity(int startX, int endX, int startY, int endY);
 };

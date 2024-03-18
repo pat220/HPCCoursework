@@ -87,8 +87,8 @@ void SolverCG::Solve(double* b, double* x) {
     for (int roar = 0; roar < p*p; ++roar) {
         if (rank == roar) {
             outputFile << "Rank " << rank << " k is: " << endl;
-            for (int i = 0; i < Nx_local-1; ++i) {
-                for (int j = 0; j < Ny_local-1; ++j) {
+            for (int j = Ny_local-1; j >= 0; --j) {
+                    for (int i = 0; i < Nx_local; ++i) {
                     outputFile << k[IDX(i,j)] << " ";
                 }
                 outputFile << endl;
@@ -109,8 +109,8 @@ void SolverCG::Solve(double* b, double* x) {
         for (int roar = 0; roar < p*p; ++roar) {
             if (rank == roar) {
                 outputFile << "Rank " << rank << " t is: " << endl;
-                for (int i = 0; i < Nx_local; ++i) {
-                    for (int j = 0; j < Ny_local; ++j) {
+                for (int j = Ny_local-1; j >= 0; --j) {
+                    for (int i = 0; i < Nx_local; ++i) {
                         outputFile << t[IDX(i,j)] << " ";
                     }
                     outputFile << endl;
@@ -178,7 +178,7 @@ void SolverCG::ApplyOperator(double* in, double* out) {
 
     int rank;
     MPI_Comm_rank(mpiGridCommunicator->cart_comm, &rank);
-    cout << "Rank " << rank << " has start_x = " << start_x << " and end_x = " << end_x << " and start_y = " << start_y << " and end_y = " << end_y << endl;
+    // cout << "Rank " << rank << " has start_x = " << start_x << " and end_x = " << end_x << " and start_y = " << start_y << " and end_y = " << end_y << endl;
     
     mpiGridCommunicator->SendReceiveEdges(in, receiveBufferTop, receiveBufferBottom, receiveBufferLeft, receiveBufferRight);
 
@@ -201,7 +201,7 @@ void SolverCG::ApplyOperator(double* in, double* out) {
                               + 2.0*in[IDX(i,   j)]
                               -     botomNeighborValueV)*dy2i;
 
-            cout << rank << " has out[" << i << "][" << j << "] = " << out[IDX(i,j)] << endl;
+            // cout << rank << " has out[" << i << "][" << j << "] = " << out[IDX(i,j)] << endl;
           
         }
     }

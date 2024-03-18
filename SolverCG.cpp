@@ -80,23 +80,23 @@ void SolverCG::Solve(double* b, double* x) {
 
     cblas_daxpy(n, -1.0, t, 1, r, 1);
     Precondition(r, z); // parallelised inside
-    cblas_dcopy(n, z, 1, k, 1);        // p_0 = r_0
+    cblas_dcopy(n, z, 1, k, 1);        // k_0 = r_0
     
 
-    MPI_Barrier(mpiGridCommunicator->cart_comm);
-    for (int roar = 0; roar < p*p; ++roar) {
-        if (rank == roar) {
-            outputFile << "Rank " << rank << " k is: " << endl;
-            for (int j = Ny_local-1; j >= 0; --j) {
-                    for (int i = 0; i < Nx_local; ++i) {
-                    outputFile << k[IDX(i,j)] << " ";
-                }
-                outputFile << endl;
-            }
-            outputFile << endl;
-        }
-        MPI_Barrier(mpiGridCommunicator->cart_comm);
-    }
+    // MPI_Barrier(mpiGridCommunicator->cart_comm);
+    // for (int roar = 0; roar < p*p; ++roar) {
+    //     if (rank == roar) {
+    //         outputFile << "Rank " << rank << " k is: " << endl;
+    //         for (int j = Ny_local-1; j >= 0; --j) {
+    //                 for (int i = 0; i < Nx_local; ++i) {
+    //                 outputFile << k[IDX(i,j)] << " ";
+    //             }
+    //             outputFile << endl;
+    //         }
+    //         outputFile << endl;
+    //     }
+    //     MPI_Barrier(mpiGridCommunicator->cart_comm);
+    // }
 
 
     g = 0;
@@ -105,20 +105,20 @@ void SolverCG::Solve(double* b, double* x) {
         // Perform action of Nabla^2 * p
         ApplyOperator(k, t); // parallelised inside
 
-        MPI_Barrier(mpiGridCommunicator->cart_comm);
-        for (int roar = 0; roar < p*p; ++roar) {
-            if (rank == roar) {
-                outputFile << "Rank " << rank << " t is: " << endl;
-                for (int j = Ny_local-1; j >= 0; --j) {
-                    for (int i = 0; i < Nx_local; ++i) {
-                        outputFile << t[IDX(i,j)] << " ";
-                    }
-                    outputFile << endl;
-                }
-                outputFile << endl;
-            }
-            MPI_Barrier(mpiGridCommunicator->cart_comm);
-        }
+        // MPI_Barrier(mpiGridCommunicator->cart_comm);
+        // for (int roar = 0; roar < p*p; ++roar) {
+        //     if (rank == roar) {
+        //         outputFile << "Rank " << rank << " t is: " << endl;
+        //         for (int j = Ny_local-1; j >= 0; --j) {
+        //             for (int i = 0; i < Nx_local; ++i) {
+        //                 outputFile << t[IDX(i,j)] << " ";
+        //             }
+        //             outputFile << endl;
+        //         }
+        //         outputFile << endl;
+        //     }
+        //     MPI_Barrier(mpiGridCommunicator->cart_comm);
+        // }
         
         
         alpha = cblas_ddot(n, t, 1, k, 1);  // alpha = p_k^T A p_k
@@ -155,16 +155,16 @@ void SolverCG::Solve(double* b, double* x) {
         cblas_daxpy(n, beta_global, k, 1, t, 1);
         cblas_dcopy(n, t, 1, k, 1);
 
-    } while (g < 1); // Set a maximum number of iterations
+    } while (g < 5000); // Set a maximum number of iterations
 
-    if (g == 1) {
+    if (g == 5000) {
         cout << "FAILED TO CONVERGE" << endl;
-        outputFile.close();
+        // outputFile.close();
         exit(-1);
     }
 
     cout << "Converged in " << g << " iterations. eps = " << eps << endl;
-    outputFile.close();
+    // outputFile.close();
 
 }
 
@@ -193,7 +193,6 @@ void SolverCG::ApplyOperator(double* in, double* out) {
             double botomNeighborValueV = (coords[0] < p - 1 && j == 0) ? receiveBufferBottom[i] : in[IDX(i, j - 1)];
             double topNeighborValueV = (coords[0] > 0 && j == Ny_local-1) ? receiveBufferTop[i] : in[IDX(i, j + 1)];
 
-            
             out[IDX(i,j)] = ( -     leftNeighborValueV
                               + 2.0*in[IDX(i,   j)]
                               -     rightNeighborValueV)*dx2i

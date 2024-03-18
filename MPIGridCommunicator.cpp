@@ -43,6 +43,7 @@ void MPIGridCommunicator::SendReceiveEdges(const double* varArray, double* recei
         // Receive data from top members 
         MPI_Irecv(receiveBufferTop, Nx_local, MPI_DOUBLE, topRank, 0, cart_comm, &request);
     }
+    MPI_Wait(&request, MPI_STATUS_IGNORE);
 
     if (topRank != MPI_PROC_NULL) {
         // Send data to top members
@@ -55,7 +56,8 @@ void MPIGridCommunicator::SendReceiveEdges(const double* varArray, double* recei
         // Receive data from bottom members 
         MPI_Irecv(receiveBufferBottom, Nx_local, MPI_DOUBLE, bottomRank, 0, cart_comm, &request);
     }
-    
+    MPI_Wait(&request, MPI_STATUS_IGNORE);
+
     if (rightRank != MPI_PROC_NULL) {
         // Send data to right members
         for (int j = 0; j < Ny_local; ++j) {
@@ -67,6 +69,7 @@ void MPIGridCommunicator::SendReceiveEdges(const double* varArray, double* recei
         // Receive data from left members 
         MPI_Irecv(receiveBufferLeft, Ny_local, MPI_DOUBLE, leftRank,0, cart_comm, &request);
     }
+    MPI_Wait(&request, MPI_STATUS_IGNORE);
 
     if (leftRank != MPI_PROC_NULL) {
         // Send data to left members
@@ -79,7 +82,6 @@ void MPIGridCommunicator::SendReceiveEdges(const double* varArray, double* recei
         // Receive data from right members 
         MPI_Irecv(receiveBufferRight, Ny_local, MPI_DOUBLE, rightRank, 0, cart_comm, &request);
     }
-
     MPI_Wait(&request, MPI_STATUS_IGNORE);
 }
 

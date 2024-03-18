@@ -122,7 +122,7 @@ void LidDrivenCavity::Initialise(MPI_Comm comm, int *coords, int p)
 void LidDrivenCavity::Integrate()
 {
     int NSteps = ceil(T / dt);
-    for (int t = 0; t < 1; ++t)
+    for (int t = 0; t < NSteps; ++t)
     {
         // std::cout << "Step: " << setw(8) << t
         //           << "  Time: " << setw(8) << t * dt

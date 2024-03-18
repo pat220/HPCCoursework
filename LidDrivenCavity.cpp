@@ -370,10 +370,10 @@ void LidDrivenCavity::InteriorVorticity(int startX, int endX, int startY, int en
     // Update the vorticity values using the received data
     for (int i = startX; i < endX; ++i) {
         for (int j = startY; j < endY; ++j) {
-            double leftNeighborValue = (coords[1] > 0 && i == 0) ? receiveBufferLeftS[j - startY] : s[IDX(i - 1, j)];
-            double rightNeighborValue = (coords[1] < p - 1 && i == Nx_local-1) ? receiveBufferRightS[j - startY] : s[IDX(i + 1, j)];
-            double botomNeighborValue = (coords[0] < p - 1 && j == 0) ? receiveBufferBottomS[i - startX] : s[IDX(i, j - 1)];
-            double topNeighborValue = (coords[0] > 0 && j == Ny_local-1) ? receiveBufferTopS[i - startX] : s[IDX(i, j + 1)];
+            double leftNeighborValue = (coords[1] > 0 && i == 0) ? receiveBufferLeftS[j] : s[IDX(i - 1, j)];
+            double rightNeighborValue = (coords[1] < p - 1 && i == Nx_local-1) ? receiveBufferRightS[j] : s[IDX(i + 1, j)];
+            double botomNeighborValue = (coords[0] < p - 1 && j == 0) ? receiveBufferBottomS[i] : s[IDX(i, j - 1)];
+            double topNeighborValue = (coords[0] > 0 && j == Ny_local-1) ? receiveBufferTopS[i] : s[IDX(i, j + 1)];
             
             vnew[IDX(i,j)] = dx2i * (2.0 * s[IDX(i,j)] - rightNeighborValue - leftNeighborValue)
                         + 1.0/dy/dy * (2.0 * s[IDX(i,j)] - botomNeighborValue - topNeighborValue);
@@ -393,15 +393,15 @@ void LidDrivenCavity::TimeAdvanceVorticity(int startX, int endX, int startY, int
     {
         for (int j = startY; j < endY; ++j)
         {
-            double leftNeighborValueS = (coords[1] > 0 && i == 0) ? receiveBufferLeftS[j - startY] : s[IDX(i - 1, j)];
-            double rightNeighborValueS = (coords[1] < p - 1 && i == Nx_local-1) ? receiveBufferRightS[j - startY] : s[IDX(i + 1, j)];
-            double botomNeighborValueS = (coords[0] < p - 1 && j == 0) ? receiveBufferBottomS[i - startX] : s[IDX(i, j - 1)];
-            double topNeighborValueS = (coords[0] > 0 && j == Ny_local-1) ? receiveBufferTopS[i - startX] : s[IDX(i, j + 1)];
+            double leftNeighborValueS = (coords[1] > 0 && i == 0) ? receiveBufferLeftS[j] : s[IDX(i - 1, j)];
+            double rightNeighborValueS = (coords[1] < p - 1 && i == Nx_local-1) ? receiveBufferRightS[j] : s[IDX(i + 1, j)];
+            double botomNeighborValueS = (coords[0] < p - 1 && j == 0) ? receiveBufferBottomS[i] : s[IDX(i, j - 1)];
+            double topNeighborValueS = (coords[0] > 0 && j == Ny_local-1) ? receiveBufferTopS[i] : s[IDX(i, j + 1)];
 
-            double leftNeighborValueV = (coords[1] > 0 && i == 0) ? receiveBufferLeftV[j - startY] : vnew[IDX(i - 1, j)];
-            double rightNeighborValueV = (coords[1] < p - 1 && i == Nx_local-1) ? receiveBufferRightV[j - startY] : vnew[IDX(i + 1, j)];
-            double botomNeighborValueV = (coords[0] < p - 1 && j == 0) ? receiveBufferBottomV[i - startX] : vnew[IDX(i, j - 1)];
-            double topNeighborValueV = (coords[0] > 0 && j == Ny_local-1) ? receiveBufferTopV[i - startX] : vnew[IDX(i, j + 1)];
+            double leftNeighborValueV = (coords[1] > 0 && i == 0) ? receiveBufferLeftV[j] : vnew[IDX(i - 1, j)];
+            double rightNeighborValueV = (coords[1] < p - 1 && i == Nx_local-1) ? receiveBufferRightV[j] : vnew[IDX(i + 1, j)];
+            double botomNeighborValueV = (coords[0] < p - 1 && j == 0) ? receiveBufferBottomV[i] : vnew[IDX(i, j - 1)];
+            double topNeighborValueV = (coords[0] > 0 && j == Ny_local-1) ? receiveBufferTopV[i] : vnew[IDX(i, j + 1)];
 
             v[IDX(i,j)] = vnew[IDX(i,j)] + dt*(
                 ( (rightNeighborValueS - leftNeighborValueS) * 0.5 * dxi

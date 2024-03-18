@@ -188,19 +188,21 @@ void SolverCG::ApplyOperator(double* in, double* out) {
     for (int j = start_y; j < end_y; ++j) {
         for (int i = start_x; i < end_x; ++i) {
 
-            double leftNeighborValueV = (coords[1] > 0 && i == start_x) ? receiveBufferLeft[j - start_y] : in[IDX(i - 1, j)];
-            double rightNeighborValueV = (coords[1] < p - 1 && i == end_x-1) ? receiveBufferRight[j - start_y] : in[IDX(i + 1, j)];
-            double botomNeighborValueV = (coords[0] < p - 1 && j == start_y) ? receiveBufferBottom[i - start_x] : in[IDX(i, j - 1)];
-            double topNeighborValueV = (coords[0] > 0 && j == end_y-1) ? receiveBufferTop[i - start_x] : in[IDX(i, j + 1)];
+            double leftNeighborValueV = (coords[1] > 0 && i == 0) ? receiveBufferLeft[j] : in[IDX(i - 1, j)];
+            double rightNeighborValueV = (coords[1] < p - 1 && i == Nx_local-1) ? receiveBufferRight[j] : in[IDX(i + 1, j)];
+            double botomNeighborValueV = (coords[0] < p - 1 && j == 0) ? receiveBufferBottom[i] : in[IDX(i, j - 1)];
+            double topNeighborValueV = (coords[0] > 0 && j == Ny_local-1) ? receiveBufferTop[i] : in[IDX(i, j + 1)];
 
-            if (rank == 0 && j == end_y-1){cout << "leftNeighborValueV is " << leftNeighborValueV << " and rightNeighborValueV is " << rightNeighborValueV << " and botomNeighborValueV is " << botomNeighborValueV << " and topNeighborValueV is " << topNeighborValueV << endl;}
-          
+            
             out[IDX(i,j)] = ( -     leftNeighborValueV
                               + 2.0*in[IDX(i,   j)]
                               -     rightNeighborValueV)*dx2i
                           + ( -     topNeighborValueV
                               + 2.0*in[IDX(i,   j)]
                               -     botomNeighborValueV)*dy2i;
+
+            cout << rank << " has out[" << i << "][" << j << "] = " << out[IDX(i,j)] << endl;
+          
         }
     }
 }

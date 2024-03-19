@@ -1,10 +1,10 @@
-CXX = mpicxx
+CXX = mpicxx -fopenmp
 CXXFLAGS = -std=c++11 -Wall -O2
 HDRS = SolverCG.h LidDrivenCavity.h MPIGridCommunicator.h
 OBJS = SolverCG.o LidDrivenCavity.o MPIGridCommunicator.o
 OBJS_MAIN = LidDrivenCavitySolver.o
 OBJS_TESTS = UnitTests.o
-LDLIBS = -llapack -lblas -lboost_program_options -lboost_unit_test_framework
+LDLIBS = -lblas -lboost_program_options -lboost_unit_test_framework
 TARGET = solver
 TARGET_TESTS = unittests
 TARGET_DOXY = doxygen_file

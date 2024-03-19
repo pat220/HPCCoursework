@@ -6,6 +6,7 @@ using namespace std;
 
 #define BOOST_TEST_MODULE UnitTests
 #define IDX(I,J) ((J)*Nx_local + (I))
+#define IDX_GLOBAL(I, J) ((J) * Nx + (I))
 
 #include <boost/program_options.hpp>
 #include <boost/test/included/unit_test.hpp>
@@ -36,19 +37,20 @@ bool compareFiles(const string& file1, const string& file2) {
     }
 
     string line1, line2;
+    stringstream ss1, ss2;
     while (!stream1.eof() && !stream2.eof()) {
         getline(stream1, line1);
         getline(stream2, line2);
-        if (line1 != line2) {
-            // Check if the characters are equal within a tolerance (there are some changes in the last digits of the order of e-310)
+        // Read each character in a line from a .txt file and go to the next line when finished
+        ss1.str(line1);
+        ss2.str(line2);
+
+        for (int i = 0; i < 9; i++) { // hard coded 9 as it is Nx = 9
             double val1, val2;
-            if (sscanf(line1.c_str(), "%lf", &val1) == 1 && sscanf(line2.c_str(), "%lf", &val2) == 1) {
-                double diff = fabs(val1 - val2);
-                if (diff > 1e-3) {
-                    cout << "Files are not equal." << endl;
-                    return false;
-                }
-            } else {
+            ss1 >> val1;
+            ss2 >> val2;
+            // cout << val1 << " " << val2 << endl;
+            if (abs(val1 - val2) > 1e-3) {
                 cout << "Files are not equal." << endl;
                 return false;
             }
@@ -60,7 +62,7 @@ bool compareFiles(const string& file1, const string& file2) {
         return true;
     }
 
-    cout << "Files are not equal (different number of lines)." << stream1.eof() << stream2.eof() << endl;
+    cout << "Files are not equal (different number of lines): " << stream1.eof() << " and " << stream2.eof() << endl;
     return false;
 }
 
@@ -166,33 +168,34 @@ BOOST_AUTO_TEST_CASE(SolverCG_file_comparison) {
     int min_points_y = (Ny - extra_y) / p;
 
     int Nx_local, Ny_local;
+    int x_first, x_last, y_first, y_last;
 
     // Calculate the starting and ending points of each process
     if (coords[1] < extra_x)
     {
         min_points_x++;
-        int x_first = coords[1] * min_points_x; // global coordinate
-        int x_last = (coords[1] + 1) * min_points_x; // global coordinate
+        x_first = coords[1] * min_points_x; // global coordinate
+        x_last = (coords[1] + 1) * min_points_x; // global coordinate
         Nx_local = x_last - x_first;
     }
     else
     {
-        int x_first = (min_points_x + 1) * extra_x + min_points_x * (coords[1] - extra_x); // global coordinate
-        int x_last = (min_points_x + 1) * extra_x + min_points_x * (coords[1] - extra_x + 1); // global coordinate
+        x_first = (min_points_x + 1) * extra_x + min_points_x * (coords[1] - extra_x); // global coordinate
+        x_last = (min_points_x + 1) * extra_x + min_points_x * (coords[1] - extra_x + 1); // global coordinate
         Nx_local = x_last - x_first;
     }
 
     if (coords[0] < extra_y)
     {
         min_points_y++;
-        int y_first = (p-1 - coords[0]) * min_points_y -1; // global coordinate
-        int y_last = (p-1 - coords[0] + 1) * min_points_y  -1; // global coordinate
+        y_first = (p-1 - coords[0]) * min_points_y -1; // global coordinate
+        y_last = (p-1 - coords[0] + 1) * min_points_y  -1; // global coordinate
         Ny_local = y_last - y_first;
     }
     else
     {
-        int y_first = (min_points_y + 1) * extra_y + min_points_y * (p-1 - coords[0] - extra_y)  -1; // global coordinate
-        int y_last = (min_points_y + 1) * extra_y + min_points_y * (p-1 - coords[0] - extra_y + 1) -1; // global coordinate
+        y_first = (min_points_y + 1) * extra_y + min_points_y * (p-1 - coords[0] - extra_y)  -1; // global coordinate
+        y_last = (min_points_y + 1) * extra_y + min_points_y * (p-1 - coords[0] - extra_y + 1) -1; // global coordinate
         Ny_local = y_last - y_first;
     }
 
@@ -222,75 +225,41 @@ BOOST_AUTO_TEST_CASE(SolverCG_file_comparison) {
     // Solve Poisson problem
     cg->Solve(v, s);
 
-
     // Write the solution to file
-    // I need to output local s of rank 12 when j is 0 iterating through x, 
-    // then iterate in x in local s of 13, then 14 and 15. when it reaches
-    //  the next one according to the list numbers[] and the rank is less 
-    // then you should just go back to the original rank and start again but in j++.
-    // once you do this and j is Ny_local you should allow the rank to change
-    // to that after in the numbers[]. in this case from 15 to 8 i.e.
+    // Gather the arrays into actual size
+    double* outputArray_s = new double[Npts]();
+    double* global_s = new double[Npts]();
 
-    int* pointerArray = new int[size];
+    MPI_Barrier(mpiGridCommunicator->cart_comm);
 
-    // ranks to jump on the grid
-    if (size == 1){
-        pointerArray[0] = 0;
-    }
-    else if (size == 4){
-        int temp[] = {2, 3, 0, 1};
-        for (int i = 0; i < size; ++i) {
-            pointerArray[i] = temp[i];
+    for (int j = y_first; j < y_last; ++j)
+    {
+        for (int i = x_first; i < x_last; ++i)
+        {
+            outputArray_s[IDX_GLOBAL(i, j)] = s[IDX(i - x_first, j - y_first)];
         }
     }
-    else if (size == 9){
-        int temp[] = {6, 7, 8, 3, 4, 5, 0, 1, 2};
-        for (int i = 0; i < size; ++i) {
-            pointerArray[i] = temp[i];
-        }
-    }
-    else if (size == 16){
-        int temp[] = {12, 13, 14, 15, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3};
-        for (int i = 0; i < size; ++i) {
-            pointerArray[i] = temp[i];
-        }
-    }
+
+    MPI_Allreduce(outputArray_s, global_s, Npts, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+    MPI_Barrier(mpiGridCommunicator->cart_comm);
 
     ofstream file;
     file.open("TestOutputSolverCG.txt");
-
-    int rank_jump = 0;
-    while (rank_jump < sqrt(size)){
-        for (int j = 0; j < Ny_local; ++j) {
-            for (int r = rank_jump*sqrt(size); r < (rank_jump + 1)*sqrt(size); ++r) {
-                if (rank == pointerArray[r]) {
-                    for (int i = 0; i < Nx_local; ++i) {
-                        file << s[IDX(i,j)] << " ";
-                    }
-                }
-            } file << endl; 
+    for (int j = 0; j < Ny; ++j) {
+        for (int i = 0; i < Nx; ++i) {
+            file << global_s[IDX_GLOBAL(i,j)] << " ";
         }
-        rank_jump++;
+        file << endl;
     }
     file.close();
-
-
-    // ofstream file;
-    // file.open("TestOutputSolverCG.txt");
-    // for (int j = 0; j < Ny_local; ++j) {
-    //     for (int i = 0; i < Nx_local; ++i) {
-    //         file << s[IDX(i,j)] << " ";
-    //     }
-    //     file << endl;
-    // }
-    // file.close();
 
     //Check it against the baseline
     cout << "Testing output files for SolverCG: " << endl;
     BOOST_CHECK(compareFiles("TestOutputSolverCG.txt", "BaselineOutputSolverCG.txt"));
     
+    MPI_Comm_free(&cart_comm);
     MPI_Finalize();
     // Finalise MPI
-    MPI_Comm_free(&cart_comm);
+    
  
 }

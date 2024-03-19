@@ -67,28 +67,28 @@ void LidDrivenCavity::SetLocalVariables(int Nx, int Ny, int p, int* coords)
     if (coords[1] < extra_x)
     {
         min_points_x++;
-        this->x_first = rank * min_points_x; // global coordinate
-        this->x_last = (rank + 1) * min_points_x; // global coordinate
+        this->x_first = coords[1] * min_points_x; // global coordinate
+        this->x_last = (coords[1] + 1) * min_points_x; // global coordinate
         this->Nx_local = x_last - x_first;
     }
     else
     {
-        this->x_first = (min_points_x + 1) * extra_x + min_points_x * (rank - extra_x); // global coordinate
-        this->x_last = (min_points_x + 1) * extra_x + min_points_x * (rank - extra_x + 1); // global coordinate
+        this->x_first = (min_points_x + 1) * extra_x + min_points_x * (coords[1] - extra_x); // global coordinate
+        this->x_last = (min_points_x + 1) * extra_x + min_points_x * (coords[1] - extra_x + 1); // global coordinate
         this->Nx_local = x_last - x_first;
     }
 
     if (coords[0] < extra_y)
     {
         min_points_y++;
-        this->y_first = rank * min_points_y; // global coordinate
-        this->y_last = (rank + 1) * min_points_y; // global coordinate
+        this->y_first = (p-1 - coords[0]) * min_points_y -1; // global coordinate
+        this->y_last = (p-1 - coords[0] + 1) * min_points_y  -1; // global coordinate
         this->Ny_local = y_last - y_first;
     }
     else
     {
-        this->y_first = (min_points_y + 1) * extra_y + min_points_y * (rank - extra_y); // global coordinate
-        this->y_last = (min_points_y + 1) * extra_y + min_points_y * (rank - extra_y + 1); // global coordinate
+        this->y_first = (min_points_y + 1) * extra_y + min_points_y * (p-1 - coords[0] - extra_y)  -1; // global coordinate
+        this->y_last = (min_points_y + 1) * extra_y + min_points_y * (p-1 - coords[0] - extra_y + 1) -1; // global coordinate
         this->Ny_local = y_last - y_first;
     }
 
@@ -153,160 +153,144 @@ void LidDrivenCavity::WriteSolution(std::string file)
             double rightNeighborValue = (coords[1] < p - 1 && i == Nx_local-1) ? receiveBufferRightS[j] : s[IDX(i + 1, j)];
             double topNeighborValue = (coords[0] > 0 && j == Ny_local-1) ? receiveBufferTopS[i] : s[IDX(i, j + 1)];
 
-            u0[IDX(i, j)] = rank; //(topNeighborValue - s[IDX(i, j)]) / dy;
-            u1[IDX(i, j)] = rank; //-(rightNeighborValue - s[IDX(i, j)]) / dx;
-            v[IDX(i, j)] = rank;
-            s[IDX(i, j)] = rank;
+            u0[IDX(i, j)] = (topNeighborValue - s[IDX(i, j)]) / dy;
+            u1[IDX(i, j)] = -(rightNeighborValue - s[IDX(i, j)]) / dx;
         }
     }
 
-    // if (coords[0] == 0){
-    //     for (int i = 0; i < Nx_local; ++i)
-    //     {
-    //         u0[IDX(i, Ny_local - 1)] = U;
-    //     }
-    // } 
-
-
-    int* counts = new int[1];
-    counts[0] = Nx_local*Ny_local;
-    int* counts_global = new int[p*p];
-
-    int* Nx_of_all = new int[p*p];
-    int* Ny_of_all = new int[p*p];
-
-    int* displacements = new int[p*p];
-
-
-    MPI_Gather(counts, 1, MPI_INT, counts_global, 1, MPI_INT, 0, mpiGridCommunicator->cart_comm);
-    MPI_Gather(&Nx_local, 1, MPI_INT, Nx_of_all, 1, MPI_INT, 0, mpiGridCommunicator->cart_comm);
-    MPI_Gather(&Ny_local, 1, MPI_INT, Ny_of_all, 1, MPI_INT, 0, mpiGridCommunicator->cart_comm);
-
-    if (rank == 0){
-        displacements[0] = 0;
-        for (int i = 1; i < p*p; ++i)
-        { 
-            displacements[i] = counts_global[i-1] + displacements[i-1];
+    if (coords[0] == 0){
+        for (int i = 0; i < Nx_local; ++i)
+        {
+            u0[IDX(i, Ny_local - 1)] = U;
         }
-    }
-    MPI_Bcast(counts_global, p*p, MPI_INT, 0, mpiGridCommunicator->cart_comm);
-    MPI_Bcast(displacements, p*p, MPI_INT, 0, mpiGridCommunicator->cart_comm);
-    MPI_Bcast(Nx_of_all, p*p, MPI_INT, 0, mpiGridCommunicator->cart_comm);
-    MPI_Bcast(Ny_of_all, p*p, MPI_INT, 0, mpiGridCommunicator->cart_comm);
-
-    // for (int i = 0; i < p*p; ++i){
-    //     cout << "Rank: " << rank << " counts_global: " << Nx_of_all[i] << " displacements: " << displacements[i] << " Nx_of_all: " << Nx_of_all[i] << " Ny_of_all: " << Ny_of_all[i] << endl;
-    // }
-
+    } 
 
     double* outputArray_u0 = new double[Npts]();
     double* outputArray_u1 = new double[Npts]();
     double* outputArray_v = new double[Npts]();
     double* outputArray_s = new double[Npts]();
 
-    MPI_Gatherv(u0, Npts_local, MPI_DOUBLE, outputArray_u0, counts_global, displacements, MPI_DOUBLE, 0, mpiGridCommunicator->cart_comm);
-    MPI_Gatherv(u1, Npts_local, MPI_DOUBLE, outputArray_u1, counts_global, displacements, MPI_DOUBLE, 0, mpiGridCommunicator->cart_comm);
-    MPI_Gatherv(v, Npts_local, MPI_DOUBLE, outputArray_v, counts_global, displacements, MPI_DOUBLE, 0, mpiGridCommunicator->cart_comm);
-    MPI_Gatherv(s, Npts_local, MPI_DOUBLE, outputArray_s, counts_global, displacements, MPI_DOUBLE, 0, mpiGridCommunicator->cart_comm);
-    
-    if (rank == 1){
-        for (int i = 0; i < Npts_local; ++i){
-            cout << "Rank: " << rank << " u0: " << u0[i] << " u1: " << u1[i] << " v: " << v[i] << " s: " << s[i] << endl;
-        }
-        cout << "miau" << endl;
-        for (int i = 0; i < Nx_of_all[rank]; ++i){
-            for (int j = 0; j < Ny_of_all[rank]; ++j){
-                int k = i + j*Nx_of_all[rank] + displacements[rank];
-                cout << "Rank: " << rank << " u0: " << outputArray_u0[k] << " u1: " << outputArray_u1[k] << " v: " << outputArray_v[k] << " s: " << outputArray_s[k] << endl;
-            }
+    double* global_u0 = new double[Npts]();
+    double* global_u1 = new double[Npts]();
+    double* global_v = new double[Npts]();
+    double* global_s = new double[Npts]();
+
+    MPI_Request request;
+    MPI_Barrier(mpiGridCommunicator->cart_comm);
+
+    for (int j = y_first; j < y_last; ++j)
+    {
+        for (int i = x_first; i < x_last; ++i)
+        {
+            outputArray_u0[IDX_GLOBAL(i, j)] = u0[IDX(i - x_first, j - y_first)];
+            outputArray_u1[IDX_GLOBAL(i, j)] = u1[IDX(i - x_first, j - y_first)];
+            outputArray_v[IDX_GLOBAL(i, j)] = v[IDX(i - x_first, j - y_first)];
+            outputArray_s[IDX_GLOBAL(i, j)] = s[IDX(i - x_first, j - y_first)];
         }
     }
 
-    // Start in rank bottom left corner = p*(p-1)
-    // You start reading the local matrix upwards in j 
-    // Once you reach the end of the column Ny_local, you go to the next rank in the same column = p*(p-1) - p
-    // Once you reach the end of the column Ny_local, you go to the next rank in the same column = p*(p-1) - 2*p
-    // Once you reach the end of the column Ny_local and the rank is p*(p-1) - (p - 1), you start again in p*(p-1) but on the coilumn next
-    // You repeat the process until you reach the end of the column Ny_local and the rank is p*p -1
-    // Once you have done this you have all the left ranks' values and want to go to the column of ranks to the right: p*(p-1) + 1
-    // You repeat the process until you reach the end of the column Ny_local and the rank is p*(p-1) + 1 - (p - 1)
-    // You then go into the next column of ranks next: p*(p-1) + 2
-    // You repeat the process until you reach the end of the column Ny_local and the rank is p*(p-1) + 2 - (p - 1)
-    // If you have reached the end of the row Ny_local and Ny_local == Ny you exit the loop
-
-    int p = mpiGridCommunicator->p;
-    int r = p * (p - 1); // starting point at bottom left corner
+    // MPI_Barrier(mpiGridCommunicator->cart_comm);
+    // for (int i = 0; i < p*p; i++){
+    //     if (rank == i){
+    //         cout << "rank " << rank << " x_first: " << x_first << " x_last: " << x_last << " y_first: " << y_first << " y_last: " << y_last << endl;
+    //         for (int j = Ny-1; j >= 0; --j){
+    //             for (int i = 0; i < Nx; i++){
+    //                 cout << outputArray_u0[IDX_GLOBAL(i, j)] << " ";
+    //             } cout << endl;
+    //         }
+    //     }
+    //     MPI_Barrier(mpiGridCommunicator->cart_comm);
+    // }
     
+    
+    MPI_Allreduce(outputArray_u0, global_u0, Npts, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+    MPI_Allreduce(outputArray_u1, global_u1, Npts, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+    MPI_Allreduce(outputArray_v, global_v, Npts, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+    MPI_Allreduce(outputArray_s, global_s, Npts, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+    MPI_Barrier(mpiGridCommunicator->cart_comm);
+    
+    double* u1new = new double[Nx_local * Ny_local]();
+    cblas_dcopy(Nx_local * Ny_local, u1, 1, u1new, 1);
+
+
     if (rank == 0){
         std::ofstream f(file.c_str());
         std::cout << "Writing file " << file << std::endl;
         int k = 0;
-        int countx = 0;
-        int county = 0;
+        int k1 = 0;
+        int k2 = 0;
+        int k3 = 0;
+        for (int i = 0; i < Nx; ++i)
+        {
+            for (int j = 0; j < Ny; ++j)
+            {
+                k = IDX_GLOBAL(i, j);
+                k1 = IDX_GLOBAL(Nx -1 - i, j);
+                k2 = IDX_GLOBAL(Nx -2 - i, j);
+                k3 = IDX_GLOBAL(i, j);
 
-        for (int i = 0; i < Nx_of_all[r]; ++i) {
-            for (int j = 0; j < Ny_of_all[r]; ++j) {
-                k = i + j*Nx_of_all[r] + displacements[r];
+                if (i == 0){
+                    f << i * dx << " " << j * dy << " " << global_v[k1] << " " << global_s[k1]
+                        << " " << global_u0[k1] << " " << global_u1[k1] << std::endl;
+                }
+                else if (i == Nx - 2){
+                    f << i * dx << " " << j * dy << " " << global_v[k1] << " " << global_s[k1]
+                        << " " << global_u0[k1] << " " << global_u1[k3] << std::endl;
+                }
+                else {
+                    f << i * dx << " " << j * dy << " " << global_v[k1] << " " << global_s[k1]
+                        << " " << global_u0[k1] << " " << global_u1[k2] << std::endl;
+                }
+            
 
-                f << countx * dx << " " << county * dy << " " << outputArray_v[k] << " " << outputArray_s[k]
-                << " " << outputArray_u0[k] << " " << outputArray_u1[k] << endl;
-
-                if (j == Ny_of_all[r] - 1 && r >= p){
-                    r -= p;
-                    j = -1; // start from bottom of next array again
-                }
-                else if (j == Ny_of_all[r] - 1 && r < p && i == Nx_of_all[r] - 1){
-                    // if its smaller than p - 1 but still at the end of the column i want to go back to the 2 previous ranks and advance in x
-                    r += p*(p-1) + 1;
-                    i = -1;
-                }
-                else if (j == Ny_of_all[r] - 1 && r < p){
-                    // if its smaller than p - 1 but still at the end of the column i want to go back to the 2 previous ranks and advance in x
-                    r += p*(p-1);
-                }
                 
-                
-                // cout << "county: " << county << " countx: " << countx << endl;
-                if (county == Ny - 1 && countx == Nx -1){ 
-                    cout << "End of the loop" << endl;
-                    break;
-                }
-
-                county += 1;
-                if (county == Ny){
-                    county = 0;
-                }
             }
-            countx += 1;
             f << std::endl;
         }
         f.close();
+
+        delete[] u0;
+        delete[] u1;
+        delete[] outputArray_u0;
+        delete[] outputArray_u1;
+        delete[] outputArray_v;
+        delete[] outputArray_s;
+        delete[] global_u0;
+        delete[] global_u1;
+        delete[] global_v;
+        delete[] global_s;
     }
 
+    // double* outputArray_v = new double[Npts]();
+    // double* outputArray_s = new double[Npts]();
+    // double* global_v = new double[Npts]();
+    // double* global_s = new double[Npts]();
 
-
-    // if (rank == 0){
-    //     std::ofstream f(file.c_str());
-    //     std::cout << "Writing file " << file << std::endl;
-    //     int k = 0;
-    //     for (int i = 0; i < Nx; ++i)
+    // for (int i = x_first; i < x_last; ++i)
+    // {
+    //     for (int j = y_first; j < y_last; ++j)
     //     {
-    //         for (int j = 0; j < Ny; ++j)
-    //         {
-    //             k = IDX(i, j);
-    //             f << i * dx << " " << j * dy << " " << outputArray_v[k] << " " << outputArray_s[k]
-    //             << " " << outputArray_u0[k] << " " << outputArray_u1[k] << std::endl;
-    //         }
-    //         f << std::endl;
+    //         outputArray_v[IDX(i, j)] = v[IDX(i - x_first, j - y_first)];
+    //         outputArray_s[IDX(i, j)] = s[IDX(i - x_first, j - y_first)];
     //     }
-    //     f.close();
-
-    //     delete[] u0;
-    //     delete[] u1;
     // }
 
-}
+    // MPI_Allreduce(outputArray_v, global_v, Npts, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+    // MPI_Allreduce(outputArray_s, global_s, Npts, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
 
+    // double* u0 = new double[Nx*Ny]();
+    // double* u1 = new double[Nx*Ny]();
+    // for (int i = 1; i < Nx - 1; ++i) {
+    //     for (int j = 1; j < Ny - 1; ++j) {
+    //         u0[IDX(i,j)] =  (global_s[IDX(i,j+1)] - global_s[IDX(i,j)]) / dy;
+    //         u1[IDX(i,j)] = -(global_s[IDX(i+1,j)] - global_s[IDX(i,j)]) / dx;
+    //     }
+    // }
+
+    // for (int i = 0; i < Nx; ++i) {
+    //     u0[IDX(i,Ny-1)] = U;
+    // }
+}
 
 void LidDrivenCavity::PrintConfiguration()
 {

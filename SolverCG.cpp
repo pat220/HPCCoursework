@@ -46,9 +46,6 @@ SolverCG::~SolverCG()
 
 void SolverCG::Solve(double* b, double* x) {
 
-    // Open the file for writing
-    std::ofstream outputFile("testingB.txt", std::ios::app); // Append mode
-
     unsigned int n = Nx_local*Ny_local;
     int g;
     double alpha, alpha_global;

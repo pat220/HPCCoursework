@@ -78,7 +78,7 @@ int main(int argc, char **argv)
     
     solver->Initialise(cart_comm, coords, p);
 
-    // solver->WriteSolution("ic.txt");
+    solver->WriteSolution("ic.txt");
 
     solver->Integrate();
 

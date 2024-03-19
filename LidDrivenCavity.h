@@ -55,6 +55,11 @@ private:
     int Ny_local = Ny;
     int Npts_local = Npts;
 
+    int x_first;
+    int x_last;
+    int y_first;
+    int y_last;
+
     double dxi;
     double dyi;
     double dx2i;

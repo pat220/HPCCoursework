@@ -82,7 +82,7 @@ int main(int argc, char **argv)
 
     solver->Integrate();
 
-    // solver->WriteSolution("final.txt");
+    solver->WriteSolution("final.txt");
 
     delete solver; // Release the allocated memory
 

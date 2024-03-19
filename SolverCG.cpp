@@ -56,17 +56,12 @@ void SolverCG::Solve(double* b, double* x) {
     double eps;
     double tol = 0.001;
 
-    int rank;
-    MPI_Comm_rank(mpiGridCommunicator->cart_comm, &rank);
-    
     // Reduce SUM to compute global dot of b and x and sqrt them
     double dot_local = cblas_ddot(n, b, 1, b, 1);
     double dot_global;
     MPI_Allreduce(&dot_local, &dot_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
     eps = sqrt(dot_global);
 
-    if (rank == 0){outputFile << "Norm is " << eps << " at 0" << endl;}
-   
     if (eps < tol*tol) {
         std::fill(x, x+n, 0.0);
         cout << "Norm is " << eps << endl;
@@ -83,55 +78,21 @@ void SolverCG::Solve(double* b, double* x) {
     cblas_dcopy(n, z, 1, k, 1);        // k_0 = r_0
     
 
-    // MPI_Barrier(mpiGridCommunicator->cart_comm);
-    // for (int roar = 0; roar < p*p; ++roar) {
-    //     if (rank == roar) {
-    //         outputFile << "Rank " << rank << " k is: " << endl;
-    //         for (int j = Ny_local-1; j >= 0; --j) {
-    //                 for (int i = 0; i < Nx_local; ++i) {
-    //                 outputFile << k[IDX(i,j)] << " ";
-    //             }
-    //             outputFile << endl;
-    //         }
-    //         outputFile << endl;
-    //     }
-    //     MPI_Barrier(mpiGridCommunicator->cart_comm);
-    // }
-
 
     g = 0;
     do {
         g++;
         // Perform action of Nabla^2 * p
         ApplyOperator(k, t); // parallelised inside
-
-        // MPI_Barrier(mpiGridCommunicator->cart_comm);
-        // for (int roar = 0; roar < p*p; ++roar) {
-        //     if (rank == roar) {
-        //         outputFile << "Rank " << rank << " t is: " << endl;
-        //         for (int j = Ny_local-1; j >= 0; --j) {
-        //             for (int i = 0; i < Nx_local; ++i) {
-        //                 outputFile << t[IDX(i,j)] << " ";
-        //             }
-        //             outputFile << endl;
-        //         }
-        //         outputFile << endl;
-        //     }
-        //     MPI_Barrier(mpiGridCommunicator->cart_comm);
-        // }
-        
         
         alpha = cblas_ddot(n, t, 1, k, 1);  // alpha = p_k^T A p_k
         MPI_Allreduce(&alpha, &alpha_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
-        // cout << rank << " alpha is going to be: in g = " << alpha << endl;
 
         alpha = cblas_ddot(n, r, 1, z, 1) / alpha_global; // compute alpha_k
         MPI_Allreduce(&alpha, &alpha_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
-        // cout << rank << " alpha2 is: in g = " << alpha << endl;
 
         beta  = cblas_ddot(n, r, 1, z, 1);  // z_k^T r_k
         MPI_Allreduce(&beta, &beta_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
-        // cout << rank << " beta is: in g = " << beta << endl;
 
         cblas_daxpy(n,  alpha_global, k, 1, x, 1);  // x_{k+1} = x_k + alpha_k p_k
         cblas_daxpy(n, -alpha_global, t, 1, r, 1); // r_{k+1} = r_k - alpha_k A p_k
@@ -140,11 +101,10 @@ void SolverCG::Solve(double* b, double* x) {
         dot_local = cblas_ddot(n, r, 1, r, 1);
         MPI_Allreduce(&dot_local, &dot_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
         eps = sqrt(dot_global);
-        if (rank == 0){outputFile << "Norm is " << eps << " at 0" << endl;}
-
         if (eps < tol*tol) {
             break;
         }
+        
         Precondition(r, z);
 
         beta = cblas_ddot(n, r, 1, z, 1) / beta_global;
@@ -159,12 +119,10 @@ void SolverCG::Solve(double* b, double* x) {
 
     if (g == 5000) {
         cout << "FAILED TO CONVERGE" << endl;
-        // outputFile.close();
         exit(-1);
     }
 
     cout << "Converged in " << g << " iterations. eps = " << eps << endl;
-    // outputFile.close();
 
 }
 

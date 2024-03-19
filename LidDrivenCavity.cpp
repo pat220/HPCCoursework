@@ -67,28 +67,28 @@ void LidDrivenCavity::SetLocalVariables(int Nx, int Ny, int p, int* coords)
     if (coords[1] < extra_x)
     {
         min_points_x++;
-        int x_first = rank * min_points_x;
-        int x_last = (rank + 1) * min_points_x;
+        this->x_first = rank * min_points_x; // global coordinate
+        this->x_last = (rank + 1) * min_points_x; // global coordinate
         this->Nx_local = x_last - x_first;
     }
     else
     {
-        int x_first = (min_points_x + 1) * extra_x + min_points_x * (rank - extra_x);
-        int x_last = (min_points_x + 1) * extra_x + min_points_x * (rank - extra_x + 1);
+        this->x_first = (min_points_x + 1) * extra_x + min_points_x * (rank - extra_x); // global coordinate
+        this->x_last = (min_points_x + 1) * extra_x + min_points_x * (rank - extra_x + 1); // global coordinate
         this->Nx_local = x_last - x_first;
     }
 
     if (coords[0] < extra_y)
     {
         min_points_y++;
-        int y_first = rank * min_points_y;
-        int y_last = (rank + 1) * min_points_y;
+        this->y_first = rank * min_points_y; // global coordinate
+        this->y_last = (rank + 1) * min_points_y; // global coordinate
         this->Ny_local = y_last - y_first;
     }
     else
     {
-        int y_first = (min_points_y + 1) * extra_y + min_points_y * (rank - extra_y);
-        int y_last = (min_points_y + 1) * extra_y + min_points_y * (rank - extra_y + 1);
+        this->y_first = (min_points_y + 1) * extra_y + min_points_y * (rank - extra_y); // global coordinate
+        this->y_last = (min_points_y + 1) * extra_y + min_points_y * (rank - extra_y + 1); // global coordinate
         this->Ny_local = y_last - y_first;
     }
 
@@ -132,40 +132,113 @@ void LidDrivenCavity::Integrate()
 }
 
 void LidDrivenCavity::WriteSolution(std::string file)
-{
-    double *u0 = new double[Nx * Ny]();
-    double *u1 = new double[Nx * Ny]();
-    for (int i = 1; i < Nx - 1; ++i)
+{   
+
+    // Get big arrays with all the data as they are in rank positions
+    double* outputArray_v = new double[Nx * Ny]();
+    double* outputArray_s = new double[Nx * Ny]();
+    double* global_V = new double[Nx * Ny]();
+    double* global_S = new double[Nx * Ny]();
+
+    memset(outputArray_v, 0, Nx * Ny * sizeof(double));
+    memset(outputArray_s, 0, Nx * Ny * sizeof(double));
+
+    for (int i = x_first; i < x_last; ++i)
     {
-        for (int j = 1; j < Ny - 1; ++j)
+        for (int j = y_first; j < y_last; ++j)
         {
-            u0[IDX(i, j)] = (s[IDX(i, j + 1)] - s[IDX(i, j)]) / dy;
-            u1[IDX(i, j)] = -(s[IDX(i + 1, j)] - s[IDX(i, j)]) / dx;
+            outputArray_v[IDX_GLOBAL(i, j)] = s[IDX(i - x_first, j - y_first)];
         }
     }
-    for (int i = 0; i < Nx; ++i)
+    MPI_Allreduce(outputArray_v, global_V, Nx * Ny, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+    
+    
+    for (int i = x_first; i < x_last; ++i)
     {
-        u0[IDX(i, Ny - 1)] = U;
-    }
-
-    std::ofstream f(file.c_str());
-    std::cout << "Writing file " << file << std::endl;
-    int k = 0;
-    for (int i = 0; i < Nx; ++i)
-    {
-        for (int j = 0; j < Ny; ++j)
+        for (int j = y_first; j < y_last; ++j)
         {
-            k = IDX(i, j);
-            f << i * dx << " " << j * dy << " " << v[k] << " " << s[k]
-              << " " << u0[k] << " " << u1[k] << std::endl;
+            outputArray_s[IDX_GLOBAL(i, j)] = s[IDX(i - x_first, j - y_first)];
         }
-        f << std::endl;
-    }
-    f.close();
+    }  
+    MPI_Allreduce(outputArray_s, global_S, Nx * Ny, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
 
-    delete[] u0;
-    delete[] u1;
+
+    if (rank == 0){
+        double *u0 = new double[Nx * Ny]();
+        double *u1 = new double[Nx * Ny]();
+        for (int i = 1; i < Nx-1; ++i)
+        {
+            for (int j = 1; j < Ny-1; ++j)
+            {
+                u0[IDX(i, j)] = (s[IDX(i, j + 1)] - s[IDX(i, j)]) / dy;
+                u1[IDX(i, j)] = -(s[IDX(i + 1, j)] - s[IDX(i, j)]) / dx;
+            }
+        }
+
+        for (int i = 0; i < Nx; ++i)
+            {
+                u0[IDX(i, Ny - 1)] = U;
+            }
+        
+
+
+        std::ofstream f(file.c_str());
+        std::cout << "Writing file " << file << std::endl;
+        int k = 0;
+        for (int i = 0; i < Nx; ++i)
+        {
+            for (int j = 0; j < Ny; ++j)
+            {
+                k = IDX(i, j);
+                f << i * dx << " " << j * dy << " " << global_V[k] << " " << global_S[k]
+                << " " << u0[k] << " " << u1[k] << std::endl;
+            }
+            f << std::endl;
+        }
+        f.close();
+
+        delete[] u0;
+        delete[] u1;
+    }
+
+    // int* counts = new int[1];
+    // int* counts_global = new int[p*p];
+    // int* displacements = new int[p*p];
+    // counts[0] = Nx_local*Ny_local;
+
+    // int rank;
+    // MPI_Comm_rank(mpiGridCommunicator->cart_comm, &rank);
+    // // MPI_Barrier(mpiGridCommunicator->cart_comm);
+    // MPI_Gather(counts, 1, MPI_INT, counts_global, 1, MPI_INT, 0, mpiGridCommunicator->cart_comm);
+
+    // if (rank == 0){
+    //     displacements[0] = 0;
+    //     for (int i = 1; i < p*p; ++i)
+    //     { 
+    //         displacements[i] = counts_global[i-1] + displacements[i-1];
+    //     }
+    // }
+    // MPI_Bcast(counts_global, p*p, MPI_INT, 0, mpiGridCommunicator->cart_comm);
+    // MPI_Bcast(displacements, p*p, MPI_INT, 0, mpiGridCommunicator->cart_comm);
+
+    // // for (int i = 0; i < p*p; ++i)
+    // // {
+    // //     cout << "Process " << i << " has " << counts_global[i] << " elements" << endl;
+    // //     cout << "Process " << i << " starts at " << displacements[i] << endl;
+    // // }
+    // double* outputArray_u0 = new double[Npts]();
+    // double* outputArray_u1 = new double[Npts]();
+    // double* outputArray_v = new double[Npts]();
+    // double* outputArray_s = new double[Npts]();
+
+    // MPI_Gatherv(u0, Npts_local, MPI_DOUBLE, outputArray_u0, counts_global, displacements, MPI_DOUBLE, 0, mpiGridCommunicator->cart_comm);
+    // MPI_Gatherv(u1, Npts_local, MPI_DOUBLE, outputArray_u1, counts_global, displacements, MPI_DOUBLE, 0, mpiGridCommunicator->cart_comm);
+    // MPI_Gatherv(v, Npts_local, MPI_DOUBLE, outputArray_v, counts_global, displacements, MPI_DOUBLE, 0, mpiGridCommunicator->cart_comm);
+    // MPI_Gatherv(s, Npts_local, MPI_DOUBLE, outputArray_s, counts_global, displacements, MPI_DOUBLE, 0, mpiGridCommunicator->cart_comm);
+    
+
 }
+
 
 void LidDrivenCavity::PrintConfiguration()
 {

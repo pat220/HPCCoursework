@@ -225,6 +225,11 @@ void LidDrivenCavity::WriteSolution(std::string file)
             for (int j = 0; j < Ny; ++j)
             {
                 k = IDX_GLOBAL(i, j);
+
+                // og
+                // f << i * dx << " " << j * dy << " " << global_v[k] << " " << global_s[k]
+                        // << " " << global_u0[k] << " " << global_u1[k] << std::endl;
+                        
                 k1 = IDX_GLOBAL(Nx -1 - i, j);
                 k2 = IDX_GLOBAL(Nx -2 - i, j);
                 k3 = IDX_GLOBAL(i, j);

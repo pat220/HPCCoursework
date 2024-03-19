@@ -165,6 +165,32 @@ void LidDrivenCavity::WriteSolution(std::string file)
         }
     } 
 
+    // mis velocidades, u1, esta shifted hacia arriba???
+    std::ofstream outputFile("hola.txt", std::ios::app);
+    if (outputFile.is_open()) {
+        // File opened successfully, you can write to it here
+        for (int r = 0; r < p*p; r++){
+            if (rank == r){
+                outputFile << "rank " << rank << " has:" << endl;
+                    for (int i = start_x; i < end_x; ++i)
+                    {
+                        for (int j = start_y; j < end_y; ++j)
+                        {
+                            outputFile << u0[IDX(i, j)] << " " << u1[IDX(i, j)]  << std::endl;
+                        }
+                        outputFile << std::endl;
+                    }
+                    MPI_Barrier(mpiGridCommunicator->cart_comm);
+            }
+        }
+    } else {
+        cout << "Failed to open the file." << endl;
+        // Failed to open the file, handle the error
+    }
+    
+    outputFile.close();
+    
+
     double* outputArray_u0 = new double[Npts]();
     double* outputArray_u1 = new double[Npts]();
     double* outputArray_v = new double[Npts]();
@@ -229,8 +255,8 @@ void LidDrivenCavity::WriteSolution(std::string file)
                 // og
                 // f << i * dx << " " << j * dy << " " << global_v[k] << " " << global_s[k]
                         // << " " << global_u0[k] << " " << global_u1[k] << std::endl;
-                        
-                k1 = IDX_GLOBAL(Nx -1 - i, j);
+
+                k1 = IDX_GLOBAL(Nx -1 - i, j); // intentado shift down todo porque esta todo shifed up, ademas la ultima esta shifted up una mas (tal y como he dicho arriba)
                 k2 = IDX_GLOBAL(Nx -2 - i, j);
                 k3 = IDX_GLOBAL(i, j);
 

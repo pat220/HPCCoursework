@@ -141,9 +141,6 @@ BOOST_AUTO_TEST_CASE(SolverCG_file_comparison) {
     double dy = Ly / (Ny-1);
     int Npts = Nx * Ny;
 
-    double* v   = new double[Npts]();
-    double* s   = new double[Npts]();
-
     // Initialize MPI
     // MPI_Init(NULL, NULL);
 
@@ -208,7 +205,10 @@ BOOST_AUTO_TEST_CASE(SolverCG_file_comparison) {
     MPIGridCommunicator* mpiGridCommunicator = new MPIGridCommunicator(cart_comm, Nx_local, Ny_local, start_x, end_x, start_y, end_y, coords, p);
 
     // Declare and initialize the variable "cg"
-    SolverCG* cg = new SolverCG(Nx, Ny, dx, dy, mpiGridCommunicator);
+    SolverCG* cg = new SolverCG(Nx_local, Ny_local, dx, dy, mpiGridCommunicator);
+
+    double* v   = new double[Nx_local*Ny_local]();
+    double* s   = new double[Nx_local*Ny_local]();
 
     const int k = 3;
     const int l = 3;
@@ -223,6 +223,7 @@ BOOST_AUTO_TEST_CASE(SolverCG_file_comparison) {
     }
 
     // Solve Poisson problem
+    cout << "Solving Poisson problem using SolverCG" << endl;
     cg->Solve(v, s);
 
     // Write the solution to file

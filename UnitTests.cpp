@@ -5,13 +5,14 @@
 using namespace std;
 
 #define BOOST_TEST_MODULE UnitTests
-#define IDX(I,J) ((J)*Nx + (I))
+#define IDX(I,J) ((J)*Nx_local + (I))
 
 #include <boost/program_options.hpp>
 #include <boost/test/included/unit_test.hpp>
 
 #include "LidDrivenCavity.h"
 #include "SolverCG.h"
+#include "MPIGridCommunicator.h"
 #include "mpi.h"
 #include <cmath> // Include the cmath library for sqrt function
 
@@ -102,13 +103,9 @@ BOOST_AUTO_TEST_CASE(LidDrivenCavitySolver_file_comparison) {
     solver->SetTimeStep(dt);
     solver->SetFinalTime(T);
     solver->SetReynoldsNumber(Re);
-    solver->SetLocalVariables(Nx, Ny, p, rank);
+    solver->SetLocalVariables(Nx, Ny, p, coords);
 
-    solver->PrintConfiguration();
-
-    solver->Initialise();
-
-    solver->GetInfoMPI(cart_comm, rank, size, coords, p);
+    solver->Initialise(cart_comm, coords, p);
 
     solver->WriteSolution("TestInputLidDrivenCavity.txt");
 
@@ -117,10 +114,6 @@ BOOST_AUTO_TEST_CASE(LidDrivenCavitySolver_file_comparison) {
     solver->WriteSolution("TestOutputLidDrivenCavity.txt");
 
     delete solver; // Release the allocated memory
-
-    // Finalise MPI
-    MPI_Comm_free(&cart_comm);
-    MPI_Finalize();
 
     cout << "Testing input files for LidDrivenCavity: " << endl;
     BOOST_CHECK(compareFiles("TestInputLidDrivenCavity.txt", "BaselineInputLidDrivenCavity.txt"));
@@ -149,37 +142,155 @@ BOOST_AUTO_TEST_CASE(SolverCG_file_comparison) {
     double* v   = new double[Npts]();
     double* s   = new double[Npts]();
 
+    // Initialize MPI
+    // MPI_Init(NULL, NULL);
+
+    // Get the total number of processes and the rank of the current process
+    int size, rank;
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    // Create a Cartesian topology
+    int p = sqrt(size);
+    int dims[2] = {p, p};  // pxp grid
+    int periods[2] = {0, 0};  // No periodicity
+    int coords[2];
+    MPI_Comm cart_comm;
+    MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, 0, &cart_comm);
+    MPI_Cart_coords(cart_comm, rank, 2, coords);
+
+    // Set up starting and end points not to include boundaries (0, Nx/Ny - 1)
+    double extra_x = Nx % p;
+    double extra_y = Ny % p;
+    int min_points_x = (Nx - extra_x) / p;
+    int min_points_y = (Ny - extra_y) / p;
+
+    int Nx_local, Ny_local;
+
+    // Calculate the starting and ending points of each process
+    if (coords[1] < extra_x)
+    {
+        min_points_x++;
+        int x_first = coords[1] * min_points_x; // global coordinate
+        int x_last = (coords[1] + 1) * min_points_x; // global coordinate
+        Nx_local = x_last - x_first;
+    }
+    else
+    {
+        int x_first = (min_points_x + 1) * extra_x + min_points_x * (coords[1] - extra_x); // global coordinate
+        int x_last = (min_points_x + 1) * extra_x + min_points_x * (coords[1] - extra_x + 1); // global coordinate
+        Nx_local = x_last - x_first;
+    }
+
+    if (coords[0] < extra_y)
+    {
+        min_points_y++;
+        int y_first = (p-1 - coords[0]) * min_points_y -1; // global coordinate
+        int y_last = (p-1 - coords[0] + 1) * min_points_y  -1; // global coordinate
+        Ny_local = y_last - y_first;
+    }
+    else
+    {
+        int y_first = (min_points_y + 1) * extra_y + min_points_y * (p-1 - coords[0] - extra_y)  -1; // global coordinate
+        int y_last = (min_points_y + 1) * extra_y + min_points_y * (p-1 - coords[0] - extra_y + 1) -1; // global coordinate
+        Ny_local = y_last - y_first;
+    }
+
+    int start_x = coords[1] == 0 ? 1 : 0;
+    int end_x = coords[1] == p - 1 ? Nx_local - 1 : Nx_local;
+    int start_y = coords[0] == p - 1 ? 1 : 0;
+    int end_y = coords[0] == 0 ? Ny_local - 1 : Ny_local;
+
+
+    MPIGridCommunicator* mpiGridCommunicator = new MPIGridCommunicator(cart_comm, Nx_local, Ny_local, start_x, end_x, start_y, end_y, coords, p);
+
     // Declare and initialize the variable "cg"
-    SolverCG* cg = new SolverCG(Nx, Ny, dx, dy);
+    SolverCG* cg = new SolverCG(Nx, Ny, dx, dy, mpiGridCommunicator);
 
     const int k = 3;
     const int l = 3;
-    for (int i = 0; i < Nx; ++i) {
-        for (int j = 0; j < Ny; ++j) {
-            v[IDX(i,j)] = -M_PI * M_PI * (k * k + l * l)
-                                       * sin(M_PI * k * i * dx)
-                                       * sin(M_PI * l * j * dy);
+    const int var1 = (k * k + l * l);
+
+    for (int i = 0; i < Nx_local; ++i) {
+        double var_i = sin(M_PI * k * i * dx);
+        for (int j = 0; j < Ny_local; ++j) {
+            double var_j = sin(M_PI * l * j * dy);
+            v[IDX(i,j)] = -M_PI * M_PI * var1 * var_i * var_j;
         }
     }
-    
 
     // Solve Poisson problem
     cg->Solve(v, s);
 
+
     // Write the solution to file
+    // I need to output local s of rank 12 when j is 0 iterating through x, 
+    // then iterate in x in local s of 13, then 14 and 15. when it reaches
+    //  the next one according to the list numbers[] and the rank is less 
+    // then you should just go back to the original rank and start again but in j++.
+    // once you do this and j is Ny_local you should allow the rank to change
+    // to that after in the numbers[]. in this case from 15 to 8 i.e.
+
+    int* pointerArray = new int[size];
+
+    // ranks to jump on the grid
+    if (size == 1){
+        pointerArray[0] = 0;
+    }
+    else if (size == 4){
+        int temp[] = {2, 3, 0, 1};
+        for (int i = 0; i < size; ++i) {
+            pointerArray[i] = temp[i];
+        }
+    }
+    else if (size == 9){
+        int temp[] = {6, 7, 8, 3, 4, 5, 0, 1, 2};
+        for (int i = 0; i < size; ++i) {
+            pointerArray[i] = temp[i];
+        }
+    }
+    else if (size == 16){
+        int temp[] = {12, 13, 14, 15, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3};
+        for (int i = 0; i < size; ++i) {
+            pointerArray[i] = temp[i];
+        }
+    }
+
     ofstream file;
     file.open("TestOutputSolverCG.txt");
-    for (int j = 0; j < Ny; ++j) {
-        for (int i = 0; i < Nx; ++i) {
-            file << s[IDX(i,j)] << " ";
+
+    int rank_jump = 0;
+    while (rank_jump < sqrt(size)){
+        for (int j = 0; j < Ny_local; ++j) {
+            for (int r = rank_jump*sqrt(size); r < (rank_jump + 1)*sqrt(size); ++r) {
+                if (rank == pointerArray[r]) {
+                    for (int i = 0; i < Nx_local; ++i) {
+                        file << s[IDX(i,j)] << " ";
+                    }
+                }
+            } file << endl; 
         }
-        file << endl;
+        rank_jump++;
     }
     file.close();
+
+
+    // ofstream file;
+    // file.open("TestOutputSolverCG.txt");
+    // for (int j = 0; j < Ny_local; ++j) {
+    //     for (int i = 0; i < Nx_local; ++i) {
+    //         file << s[IDX(i,j)] << " ";
+    //     }
+    //     file << endl;
+    // }
+    // file.close();
 
     //Check it against the baseline
     cout << "Testing output files for SolverCG: " << endl;
     BOOST_CHECK(compareFiles("TestOutputSolverCG.txt", "BaselineOutputSolverCG.txt"));
     
+    MPI_Finalize();
+    // Finalise MPI
+    MPI_Comm_free(&cart_comm);
  
 }

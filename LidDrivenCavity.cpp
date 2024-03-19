@@ -272,8 +272,6 @@ void LidDrivenCavity::WriteSolution(std::string file)
                     f << i * dx << " " << j * dy << " " << global_v[k1] << " " << global_s[k1]
                         << " " << global_u0[k1] << " " << global_u1[k2] << std::endl;
                 }
-            
-
                 
             }
             f << std::endl;

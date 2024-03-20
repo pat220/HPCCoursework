@@ -38,7 +38,10 @@ bool compareFiles(const string& file1, const string& file2) {
 
     string line1, line2;
     stringstream ss1, ss2;
-    while (!stream1.eof() && !stream2.eof()) {
+    bool stream1_eof = stream1.eof();
+    bool stream2_eof = stream2.eof();
+    
+    while (!stream1_eof && !stream2_eof) {
         getline(stream1, line1);
         getline(stream2, line2);
         // Read each character in a line from a .txt file and go to the next line when finished
@@ -55,6 +58,9 @@ bool compareFiles(const string& file1, const string& file2) {
                 return false;
             }
         }
+
+        stream1_eof = stream1.eof();
+        stream2_eof = stream2.eof();
     }
 
     if (stream1.eof() && stream2.eof()) {
@@ -185,14 +191,14 @@ BOOST_AUTO_TEST_CASE(SolverCG_file_comparison) {
     if (coords[0] < extra_y)
     {
         min_points_y++;
-        y_first = (p-1 - coords[0]) * min_points_y -1; // global coordinate
-        y_last = (p-1 - coords[0] + 1) * min_points_y  -1; // global coordinate
+        y_last = abs( Ny -(coords[0]) * min_points_y); // global coordinate
+        y_first = abs( Ny -(coords[0] + 1) * min_points_y); // global coordinate
         Ny_local = y_last - y_first;
     }
     else
     {
-        y_first = (min_points_y + 1) * extra_y + min_points_y * (p-1 - coords[0] - extra_y)  -1; // global coordinate
-        y_last = (min_points_y + 1) * extra_y + min_points_y * (p-1 - coords[0] - extra_y + 1) -1; // global coordinate
+        y_last = abs( Ny - ((min_points_y + 1) * extra_y + min_points_y * (coords[0] - extra_y))); // global coordinate
+        y_first = abs( Ny -((min_points_y + 1) * extra_y + min_points_y * (coords[0] - extra_y + 1))); // global coordinate
         Ny_local = y_last - y_first;
     }
 
@@ -205,7 +211,7 @@ BOOST_AUTO_TEST_CASE(SolverCG_file_comparison) {
     MPIGridCommunicator* mpiGridCommunicator = new MPIGridCommunicator(cart_comm, Nx_local, Ny_local, start_x, end_x, start_y, end_y, coords, p);
 
     // Declare and initialize the variable "cg"
-    SolverCG* cg = new SolverCG(Nx_local, Ny_local, dx, dy, mpiGridCommunicator);
+    SolverCG* cg = new SolverCG(Nx, Ny, dx, dy, mpiGridCommunicator);
 
     double* v   = new double[Nx_local*Ny_local]();
     double* s   = new double[Nx_local*Ny_local]();
@@ -214,22 +220,35 @@ BOOST_AUTO_TEST_CASE(SolverCG_file_comparison) {
     const int l = 3;
     const int var1 = (k * k + l * l);
 
-    for (int i = 0; i < Nx_local; ++i) {
+    for (int i = x_first; i < x_first + Nx_local; ++i) {
         double var_i = sin(M_PI * k * i * dx);
-        for (int j = 0; j < Ny_local; ++j) {
+        for (int j = y_first; j < y_first + Ny_local; ++j) {
             double var_j = sin(M_PI * l * j * dy);
-            v[IDX(i,j)] = -M_PI * M_PI * var1 * var_i * var_j;
+            v[IDX(i - x_first,j - y_first)] = -M_PI * M_PI * var1 * var_i * var_j;
         }
     }
 
+    // ofstream file;
+    // file.open("TestOutputSolverCG.txt", ios::app);
+    // for (int r = 0; r < p*p; ++r) {
+    //     if (r == rank) {
+    //         file << "Rank: " << rank << endl;
+    //         file << "x first: " << x_first << " x last: " << x_last << " y first: " << y_first << " y last: " << y_last << endl;
+    //         for (int j = 0; j < Ny_local; ++j) {
+    //             for (int i = 0; i < Nx_local; ++i) {
+    //                 file << v[IDX(i,j)] << " ";
+    //             }
+    //             file << endl;
+    //         } 
+    //         MPI_Barrier(cart_comm);
+    //     }
+    // }
+    // file.close();
+
     // Solve Poisson problem
     cout << "Solving Poisson problem using SolverCG" << endl;
-    cg->Solve(v, s);
-
-    // Write the solution to file
-    // Gather the arrays into actual size
-    double* outputArray_s = new double[Npts]();
-    double* global_s = new double[Npts]();
+    double* outputArray_v = new double[Npts]();
+    double* global_v = new double[Npts]();
 
     MPI_Barrier(mpiGridCommunicator->cart_comm);
 
@@ -237,18 +256,23 @@ BOOST_AUTO_TEST_CASE(SolverCG_file_comparison) {
     {
         for (int i = x_first; i < x_last; ++i)
         {
-            outputArray_s[IDX_GLOBAL(i, j)] = s[IDX(i - x_first, j - y_first)];
+            outputArray_v[IDX_GLOBAL(i, j)] = v[IDX(i - x_first, j - y_first)];
         }
     }
 
-    MPI_Allreduce(outputArray_s, global_s, Npts, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+    MPI_Allreduce(outputArray_v, global_v, Npts, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
     MPI_Barrier(mpiGridCommunicator->cart_comm);
+
+    cg->Solve(global_v, s);
+
+    // Write the solution to file
+    // Gather the arrays into actual size
 
     ofstream file;
     file.open("TestOutputSolverCG.txt");
     for (int j = 0; j < Ny; ++j) {
         for (int i = 0; i < Nx; ++i) {
-            file << global_s[IDX_GLOBAL(i,j)] << " ";
+            file << s[IDX_GLOBAL(i,j)] << " ";
         }
         file << endl;
     }

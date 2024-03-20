@@ -118,7 +118,7 @@ void SolverCG::Solve(double* b, double* x) {
         exit(-1);
     }
 
-    cout << "Converged in " << g << " iterations. eps = " << eps << endl;
+    // cout << "Converged in " << g << " iterations. eps = " << eps << endl; // commented out to test time only
 
 }
 

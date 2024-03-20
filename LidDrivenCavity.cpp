@@ -82,14 +82,14 @@ void LidDrivenCavity::SetLocalVariables(int Nx, int Ny, int p, int* coords)
     if (coords[0] < extra_y)
     {
         min_points_y++;
-        this->y_first = (coords[0]) * min_points_y; // global coordinate
-        this->y_last = (coords[0] + 1) * min_points_y; // global coordinate
+        this->y_last = Ny - (coords[0]) * min_points_y; // global coordinate
+        this->y_first = Ny - (coords[0] + 1) * min_points_y; // global coordinate
         this->Ny_local = y_last - y_first;
     }
     else
     {
-        this->y_first = (min_points_y + 1) * extra_y + min_points_y * (coords[0] - extra_y); // global coordinate
-        this->y_last = (min_points_y + 1) * extra_y + min_points_y * (coords[0] - extra_y + 1); // global coordinate
+        this->y_last = Ny - ((min_points_y + 1) * extra_y + min_points_y * (coords[0] - extra_y)); // global coordinate
+        this->y_first = Ny - ((min_points_y + 1) * extra_y + min_points_y * (coords[0] - extra_y + 1)); // global coordinate
         this->Ny_local = y_last - y_first;
     }
 
@@ -184,10 +184,10 @@ void LidDrivenCavity::WriteSolution(std::string file)
     {
         for (int i = x_first; i < x_last; ++i)
         {
-            outputArray_u0[IDX_GLOBAL(i, Ny -1 - j)] = u0[IDX(i - x_first, abs(Ny_local - 1 - (j - y_first)))];
-            outputArray_u1[IDX_GLOBAL(i, Ny -1 - j)] = u1[IDX(i - x_first, abs(Ny_local - 1  - (j - y_first)))];
-            outputArray_v[IDX_GLOBAL(i, Ny -1 - j)] = v[IDX(i - x_first, abs(Ny_local - 1  - (j - y_first)))];
-            outputArray_s[IDX_GLOBAL(i, Ny -1 - j)] = s[IDX(i - x_first, abs(Ny_local - 1  - (j - y_first)))];
+            outputArray_u0[IDX_GLOBAL(i, j)] = u0[IDX(i - x_first, j - y_first)];
+            outputArray_u1[IDX_GLOBAL(i, j)] = u1[IDX(i - x_first, j - y_first)];
+            outputArray_v[IDX_GLOBAL(i, j)] = v[IDX(i - x_first, j - y_first)];
+            outputArray_s[IDX_GLOBAL(i, j)] = s[IDX(i - x_first, j - y_first)];
         }
     }
 

@@ -3,10 +3,12 @@ CXXFLAGS = -std=c++11 -Wall -O2
 HDRS = SolverCG.h LidDrivenCavity.h MPIGridCommunicator.h
 OBJS = SolverCG.o LidDrivenCavity.o MPIGridCommunicator.o
 OBJS_MAIN = LidDrivenCavitySolver.o
-OBJS_TESTS = UnitTests.o
+OBJS_TESTS_SCG = UnitTestSCG.o
+OBJS_TESTS_LDC = UnitTestLDC.o
 LDLIBS = -lblas -lboost_program_options -lboost_unit_test_framework #-lboost_chrono #-lboost_timer
 TARGET = solver
-TARGET_TESTS = unittests
+TARGET_TESTS_SCG = unittest_scg
+TARGET_TESTS_LDC = unittest_ldc
 TARGET_DOXY = doxygen_file
 
 default: $(TARGET)
@@ -17,12 +19,19 @@ default: $(TARGET)
 $(TARGET): $(OBJS_MAIN) $(OBJS) 
 	$(CXX) -o $@ $^ $(LDLIBS)
 
-$(TARGET_TESTS): $(OBJS_TESTS) $(OBJS) 
+$(TARGET_TESTS_SCG): $(OBJS_TESTS_SCG) $(OBJS) 
 	$(CXX) -o $@ $^ $(LDLIBS)
-	
+
+$(TARGET_TESTS_LDC): $(OBJS_TESTS_LDC) $(OBJS)
+	$(CXX) -o $@ $^ $(LDLIBS)
+
+doc:
+	doxygen $(TARGET_DOXY)
+
+
 .PHONY: clean	
 clean:	
-	-rm -f *.o $(TARGET) $(TARGET_TESTS)
+	-rm -f *.o $(TARGET) $(TARGET_TESTS_SCG)
 	
 .PHONY: docs
 docs:

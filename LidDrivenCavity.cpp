@@ -67,28 +67,28 @@ void LidDrivenCavity::SetLocalVariables(int Nx, int Ny, int p, int* coords)
     if (coords[1] < extra_x)
     {
         min_points_x++;
-        this->x_first = coords[1] * min_points_x; // global coordinate
-        this->x_last = (coords[1] + 1) * min_points_x; // global coordinate
+        this->x_first = rank * min_points_x; // global coordinate
+        this->x_last = (rank + 1) * min_points_x; // global coordinate
         this->Nx_local = x_last - x_first;
     }
     else
     {
-        this->x_first = (min_points_x + 1) * extra_x + min_points_x * (coords[1] - extra_x); // global coordinate
-        this->x_last = (min_points_x + 1) * extra_x + min_points_x * (coords[1] - extra_x + 1); // global coordinate
+        this->x_first = (min_points_x + 1) * extra_x + min_points_x * (rank); // global coordinate
+        this->x_last = (min_points_x + 1) * extra_x + min_points_x * (rank + 1); // global coordinate
         this->Nx_local = x_last - x_first;
     }
 
     if (coords[0] < extra_y)
     {
         min_points_y++;
-        this->y_first = (p-1 - coords[0]) * min_points_y -1; // global coordinate
-        this->y_last = (p-1 - coords[0] + 1) * min_points_y  -1; // global coordinate
+        this->y_first = (rank) * min_points_y; // global coordinate
+        this->y_last = (rank + 1) * min_points_y; // global coordinate
         this->Ny_local = y_last - y_first;
     }
     else
     {
-        this->y_first = (min_points_y + 1) * extra_y + min_points_y * (p-1 - coords[0] - extra_y)  -1; // global coordinate
-        this->y_last = (min_points_y + 1) * extra_y + min_points_y * (p-1 - coords[0] - extra_y + 1) -1; // global coordinate
+        this->y_first = (min_points_y + 1) * extra_y + min_points_y * (rank); // global coordinate
+        this->y_last = (min_points_y + 1) * extra_y + min_points_y * (rank + 1); // global coordinate
         this->Ny_local = y_last - y_first;
     }
 
@@ -165,28 +165,28 @@ void LidDrivenCavity::WriteSolution(std::string file)
         }
     } 
 
-    // mis velocidades, u1, esta shifted hacia arriba???
-    std::ofstream outputFile("hola.txt", std::ios::app);
-    if (outputFile.is_open()) {
-        // File opened successfully, you can write to it here
-        for (int r = 0; r < p*p; r++){
-            if (rank == r){
-                outputFile << "rank " << rank << " has:" << endl;
-                    for (int i = start_x; i < end_x; ++i)
-                    {
-                        for (int j = start_y; j < end_y; ++j)
-                        {
-                            outputFile << u0[IDX(i, j)] << " " << u1[IDX(i, j)]  << std::endl;
-                        }
-                        outputFile << std::endl;
-                    }
-                    MPI_Barrier(mpiGridCommunicator->cart_comm);
-            }
-        }
-    } else {
-        cout << "Failed to open the file." << endl;
-        // Failed to open the file, handle the error
-    }
+    // // mis velocidades, u1, esta shifted hacia arriba???
+    // std::ofstream outputFile("hola.txt", std::ios::app);
+    // if (outputFile.is_open()) {
+    //     // File opened successfully, you can write to it here
+    //     for (int r = 0; r < p*p; r++){
+    //         if (rank == r){
+    //             outputFile << "rank " << rank << " has:" << endl;
+    //                 for (int i = 0; i < Nx_local; ++i)
+    //                 {
+    //                     for (int j = 0; j < Ny_local; ++j)
+    //                     {
+    //                         outputFile << u0[IDX(i, j)] << " " << u1[IDX(i, j)]  << std::endl;
+    //                     }
+    //                     outputFile << std::endl;
+    //                 }
+    //                 MPI_Barrier(mpiGridCommunicator->cart_comm);
+    //         }
+    //     }
+    // } else {
+    //     cout << "Failed to open the file." << endl;
+    //     // Failed to open the file, handle the error
+    // }
     
     outputFile.close();
     
@@ -215,6 +215,9 @@ void LidDrivenCavity::WriteSolution(std::string file)
         }
     }
 
+    cout << "rank " << rank << " x_first: " << x_first << " x_last: " << x_last << " y_first: " << y_first << " y_last: " << y_last << endl;
+    MPI_Barrier(mpiGridCommunicator->cart_comm);
+          
     // MPI_Barrier(mpiGridCommunicator->cart_comm);
     // for (int i = 0; i < p*p; i++){
     //     if (rank == i){
@@ -227,7 +230,6 @@ void LidDrivenCavity::WriteSolution(std::string file)
     //     }
     //     MPI_Barrier(mpiGridCommunicator->cart_comm);
     // }
-    
     
     MPI_Allreduce(outputArray_u0, global_u0, Npts, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
     MPI_Allreduce(outputArray_u1, global_u1, Npts, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
@@ -243,9 +245,6 @@ void LidDrivenCavity::WriteSolution(std::string file)
         std::ofstream f(file.c_str());
         std::cout << "Writing file " << file << std::endl;
         int k = 0;
-        int k1 = 0;
-        int k2 = 0;
-        int k3 = 0;
         for (int i = 0; i < Nx; ++i)
         {
             for (int j = 0; j < Ny; ++j)
@@ -253,26 +252,9 @@ void LidDrivenCavity::WriteSolution(std::string file)
                 k = IDX_GLOBAL(i, j);
 
                 // og
-                // f << i * dx << " " << j * dy << " " << global_v[k] << " " << global_s[k]
-                        // << " " << global_u0[k] << " " << global_u1[k] << std::endl;
+                f << i * dx << " " << j * dy << " " << global_v[k] << " " << global_s[k]
+                        << " " << global_u0[k] << " " << global_u1[k] << std::endl;
 
-                k1 = IDX_GLOBAL(Nx -1 - i, j); // intentado shift down todo porque esta todo shifed up, ademas la ultima esta shifted up una mas (tal y como he dicho arriba)
-                k2 = IDX_GLOBAL(Nx -2 - i, j);
-                k3 = IDX_GLOBAL(i, j);
-
-                if (i == 0){
-                    f << i * dx << " " << j * dy << " " << global_v[k1] << " " << global_s[k1]
-                        << " " << global_u0[k1] << " " << global_u1[k1] << std::endl;
-                }
-                else if (i == Nx - 2){
-                    f << i * dx << " " << j * dy << " " << global_v[k1] << " " << global_s[k1]
-                        << " " << global_u0[k1] << " " << global_u1[k3] << std::endl;
-                }
-                else {
-                    f << i * dx << " " << j * dy << " " << global_v[k1] << " " << global_s[k1]
-                        << " " << global_u0[k1] << " " << global_u1[k2] << std::endl;
-                }
-                
             }
             f << std::endl;
         }
@@ -290,35 +272,35 @@ void LidDrivenCavity::WriteSolution(std::string file)
         delete[] global_s;
     }
 
-    // double* outputArray_v = new double[Npts]();
-    // double* outputArray_s = new double[Npts]();
-    // double* global_v = new double[Npts]();
-    // double* global_s = new double[Npts]();
+    // // double* outputArray_v = new double[Npts]();
+    // // double* outputArray_s = new double[Npts]();
+    // // double* global_v = new double[Npts]();
+    // // double* global_s = new double[Npts]();
 
-    // for (int i = x_first; i < x_last; ++i)
-    // {
-    //     for (int j = y_first; j < y_last; ++j)
-    //     {
-    //         outputArray_v[IDX(i, j)] = v[IDX(i - x_first, j - y_first)];
-    //         outputArray_s[IDX(i, j)] = s[IDX(i - x_first, j - y_first)];
-    //     }
-    // }
+    // // for (int i = x_first; i < x_last; ++i)
+    // // {
+    // //     for (int j = y_first; j < y_last; ++j)
+    // //     {
+    // //         outputArray_v[IDX(i, j)] = v[IDX(i - x_first, j - y_first)];
+    // //         outputArray_s[IDX(i, j)] = s[IDX(i - x_first, j - y_first)];
+    // //     }
+    // // }
 
-    // MPI_Allreduce(outputArray_v, global_v, Npts, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
-    // MPI_Allreduce(outputArray_s, global_s, Npts, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+    // // MPI_Allreduce(outputArray_v, global_v, Npts, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+    // // MPI_Allreduce(outputArray_s, global_s, Npts, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
 
-    // double* u0 = new double[Nx*Ny]();
-    // double* u1 = new double[Nx*Ny]();
-    // for (int i = 1; i < Nx - 1; ++i) {
-    //     for (int j = 1; j < Ny - 1; ++j) {
-    //         u0[IDX(i,j)] =  (global_s[IDX(i,j+1)] - global_s[IDX(i,j)]) / dy;
-    //         u1[IDX(i,j)] = -(global_s[IDX(i+1,j)] - global_s[IDX(i,j)]) / dx;
-    //     }
-    // }
+    // // double* u0 = new double[Nx*Ny]();
+    // // double* u1 = new double[Nx*Ny]();
+    // // for (int i = 1; i < Nx - 1; ++i) {
+    // //     for (int j = 1; j < Ny - 1; ++j) {
+    // //         u0[IDX(i,j)] =  (global_s[IDX(i,j+1)] - global_s[IDX(i,j)]) / dy;
+    // //         u1[IDX(i,j)] = -(global_s[IDX(i+1,j)] - global_s[IDX(i,j)]) / dx;
+    // //     }
+    // // }
 
-    // for (int i = 0; i < Nx; ++i) {
-    //     u0[IDX(i,Ny-1)] = U;
-    // }
+    // // for (int i = 0; i < Nx; ++i) {
+    // //     u0[IDX(i,Ny-1)] = U;
+    // // }
 }
 
 void LidDrivenCavity::PrintConfiguration()
@@ -439,7 +421,8 @@ void LidDrivenCavity::NodeVorticity()
             vnew[IDX(0, j)] = 2.0 * dx2i * (s[IDX(0, j)] - s[IDX(1, j)]);
         }
     }
-    else if (coords[0] == 0 && coords[1] == p - 1)
+    
+    if (coords[0] == 0 && coords[1] == p - 1)
     {
         for (int i = 0; i < Nx_local-1; ++i)
         {
@@ -452,7 +435,8 @@ void LidDrivenCavity::NodeVorticity()
             vnew[IDX(Nx_local - 1, j)] = 2.0 * dx2i * (s[IDX(Nx_local - 1, j)] - s[IDX(Nx_local - 2, j)]);
         }
     }
-    else if (coords[0] == p - 1 && coords[1] == 0)
+    
+    if (coords[0] == p - 1 && coords[1] == 0)
     {
         for (int i = 1; i < Nx_local; ++i)
         {
@@ -465,7 +449,8 @@ void LidDrivenCavity::NodeVorticity()
             vnew[IDX(0, j)] = 2.0 * dx2i * (s[IDX(0, j)] - s[IDX(1, j)]);
         }
     }
-    else if (coords[0] == p - 1 && coords[1] == p - 1)
+    
+    if (coords[0] == p - 1 && coords[1] == p - 1)
     {
         for (int i = 0; i < Nx_local-1; ++i)
         {
@@ -488,7 +473,8 @@ void LidDrivenCavity::NodeVorticity()
             vnew[IDX(i, Ny_local - 1)] = 2.0 * dy2i * (s[IDX(i, Ny_local - 1)] - s[IDX(i, Ny_local - 2)]) - 2.0 * dyi * U;
         }
     }
-    else if (coords[0] == p - 1 && !(coords[1] == 0 || coords[1] == p - 1))
+    
+    if (coords[0] == p - 1 && !(coords[1] == 0 || coords[1] == p - 1))
     {
         for (int i = 0; i < Nx_local; ++i)
         {
@@ -496,7 +482,8 @@ void LidDrivenCavity::NodeVorticity()
             vnew[IDX(i, 0)] = 2.0 * dy2i * (s[IDX(i, 0)] - s[IDX(i, 1)]);
         }
     }
-    else if (coords[1] == 0 && !(coords[0] == 0 || coords[0] == p - 1))
+    
+    if (coords[1] == 0 && !(coords[0] == 0 || coords[0] == p - 1))
     {
         for (int j = 0; j < Ny_local; ++j)
         {
@@ -504,7 +491,8 @@ void LidDrivenCavity::NodeVorticity()
             vnew[IDX(0, j)] = 2.0 * dx2i * (s[IDX(0, j)] - s[IDX(1, j)]);
         }
     }
-    else if (coords[1] == p - 1 && !(coords[0] == 0 || coords[0] == p - 1))
+    
+    if (coords[1] == p - 1 && !(coords[0] == 0 || coords[0] == p - 1))
     {
         for (int j = 0; j < Ny_local; ++j)
         {
@@ -559,8 +547,8 @@ void LidDrivenCavity::TimeAdvanceVorticity(int startX, int endX, int startY, int
 
             v[IDX(i,j)] = vnew[IDX(i,j)] + dt*(
                 ( (rightNeighborValueS - leftNeighborValueS) * 0.5 * dxi
-                *(botomNeighborValueV - topNeighborValueV) * 0.5 * dyi)
-            - ( (botomNeighborValueS - topNeighborValueS) * 0.5 * dyi
+                *(topNeighborValueV - botomNeighborValueV) * 0.5 * dyi)
+            - ( (topNeighborValueS - botomNeighborValueS) * 0.5 * dyi
                 *(rightNeighborValueV - leftNeighborValueV) * 0.5 * dxi)
             + nu * (rightNeighborValueV - 2.0 * vnew[IDX(i,j)] + leftNeighborValueV)*dx2i
             + nu * (botomNeighborValueV - 2.0 * vnew[IDX(i,j)] + topNeighborValueV)*dy2i);

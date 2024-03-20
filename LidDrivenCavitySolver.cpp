@@ -19,6 +19,7 @@ namespace po = boost::program_options;
 
 int main(int argc, char **argv)
 {
+
     po::options_description opts(
         "Solver for the 2D lid-driven cavity incompressible flow problem");
     opts.add_options()

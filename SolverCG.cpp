@@ -74,8 +74,6 @@ void SolverCG::Solve(double* b, double* x) {
     Precondition(r, z); // parallelised inside
     cblas_dcopy(n, z, 1, k, 1);        // k_0 = r_0
     
-
-
     g = 0;
     do {
         g++;
@@ -185,7 +183,8 @@ void SolverCG::Precondition(double* in, double* out) {
             out[IDX(i, Ny_local-1)] = in[IDX(i, Ny_local-1)];
         }
     }
-    else if (coords[0] == p - 1) //bottom
+    
+    if (coords[0] == p - 1) //bottom
     {
         for (int i = 0; i < Nx_local; ++i) {
             out[IDX(i, 0)] = in[IDX(i,0)];
@@ -198,7 +197,8 @@ void SolverCG::Precondition(double* in, double* out) {
             out[IDX(0, j)] = in[IDX(0, j)];
         }
     }
-    else if (coords[1] == p - 1) //right
+    
+    if (coords[1] == p - 1) //right
     {
         for (int j = 0; j < Ny_local; ++j) {
             out[IDX(Nx_local - 1, j)] = in[IDX(Nx_local - 1, j)];
@@ -237,7 +237,8 @@ void SolverCG::ImposeBC(double* inout) {
             inout[IDX(i, Ny_local-1)] = 0.0;
         }
     }
-    else if (coords[0] == p - 1) // bottom
+    
+    if (coords[0] == p - 1) // bottom
     {
         for (int i = 0; i < Nx_local; ++i) {
             inout[IDX(i, 0)] = 0.0;
@@ -250,7 +251,8 @@ void SolverCG::ImposeBC(double* inout) {
             inout[IDX(0, j)] = 0.0;
         }
     }
-    else if (coords[1] == p - 1) // right
+    
+    if (coords[1] == p - 1) // right
     {
         for (int j = 0; j < Ny_local; ++j) {
             inout[IDX(Nx_local-1, j)] = 0.0;

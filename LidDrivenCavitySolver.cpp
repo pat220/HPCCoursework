@@ -60,6 +60,14 @@ int main(int argc, char **argv)
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
+    if (sqrt(size) != floor(sqrt(size)) || size > 16) {
+        if (rank == 0) {
+            cout << "The number of processes must be a perfect square and less than 16" << endl;
+        }
+        MPI_Finalize();
+        return 1;
+    }
+
     // Create a Cartesian topology
     int p = sqrt(size);
     int dims[2] = {p, p};  // pxp grid

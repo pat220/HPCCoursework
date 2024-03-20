@@ -6,6 +6,7 @@ namespace po = boost::program_options;
 
 #include "LidDrivenCavity.h"
 #include "mpi.h"
+#include <omp.h>
 #include <cmath> // Include the cmath library for sqrt function
 
 /**
@@ -19,6 +20,8 @@ namespace po = boost::program_options;
 
 int main(int argc, char **argv)
 {
+    // Set the number of threads to be used by OpenMP in terminal with the following command:
+    // OMP_NUM_THREADS=...
 
     po::options_description opts(
         "Solver for the 2D lid-driven cavity incompressible flow problem");

@@ -10,6 +10,7 @@ using namespace std;
 
 #include <cblas.h>
 #include "mpi.h"
+#include <omp.h>
 #include "SolverCG.h"
 #include "MPIGridCommunicator.h"
 

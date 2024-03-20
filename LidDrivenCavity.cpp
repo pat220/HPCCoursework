@@ -15,6 +15,7 @@ using namespace std;
 #include "SolverCG.h"
 #include "MPIGridCommunicator.h"
 #include "mpi.h"
+#include <omp.h>
 
 LidDrivenCavity::LidDrivenCavity()
 {
@@ -342,11 +343,13 @@ void LidDrivenCavity::NodeVorticity()
 
     if (coords[0] == 0 && coords[1] == 0)
     {
+        
         for (int i = 1; i < Nx_local; ++i)
         {
             // top
             vnew[IDX(i, Ny_local - 1)] = 2.0 * dy2i * (s[IDX(i, Ny_local - 1)] - s[IDX(i, Ny_local - 2)]) - 2.0 * dyi * U;
         }
+
         for (int j = 0; j < Ny_local-1; ++j)
         {
             // left
@@ -463,9 +466,15 @@ void LidDrivenCavity::TimeAdvanceVorticity(int startX, int endX, int startY, int
     mpiGridCommunicator->SendReceiveEdges(s, receiveBufferTopS, receiveBufferBottomS, receiveBufferLeftS, receiveBufferRightS);
 
     // Update the vorticity values using the received data
-    for (int i = startX; i < endX; ++i)
+    // #pragma omp parallel
+    // {   
+    // int id = omp_get_thread_num();
+    // int nthreads = omp_get_num_threads();
+
+    // #pragma omp for schedule(dynamic, 1)
+    for (int i = startX; i < endX; i++)
     {
-        for (int j = startY; j < endY; ++j)
+        for (int j = startY; j < endY; j++)
         {
             double leftNeighborValueS = (coords[1] > 0 && i == 0) ? receiveBufferLeftS[j] : s[IDX(i - 1, j)];
             double rightNeighborValueS = (coords[1] < p - 1 && i == Nx_local-1) ? receiveBufferRightS[j] : s[IDX(i + 1, j)];
@@ -485,5 +494,6 @@ void LidDrivenCavity::TimeAdvanceVorticity(int startX, int endX, int startY, int
             + nu * (rightNeighborValueV - 2.0 * vnew[IDX(i,j)] + leftNeighborValueV)*dx2i
             + nu * (botomNeighborValueV - 2.0 * vnew[IDX(i,j)] + topNeighborValueV)*dy2i);
         }
+    // }
     }
 }

@@ -1,6 +1,8 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <sstream>
+#include <vector>
 
 using namespace std;
 
@@ -36,40 +38,45 @@ bool compareFiles(const string& file1, const string& file2) {
         return false;
     }
 
+    vector<double> vec1, vec2;
     string line1, line2;
-    stringstream ss1, ss2;
-    bool stream1_eof = stream1.eof();
-    bool stream2_eof = stream2.eof();
     
-    while (!stream1_eof && !stream2_eof) {
-        getline(stream1, line1);
-        getline(stream2, line2);
-        // Read each character in a line from a .txt file and go to the next line when finished
-        ss1.str(line1);
-        ss2.str(line2);
-
-        for (int i = 0; i < 9; i++) { // hard coded 9 as it is Nx = 9
-            double val1, val2;
-            ss1 >> val1;
-            ss2 >> val2;
-            // cout << val1 << " " << val2 << endl;
-            if (abs(val1 - val2) > 1e-3) {
-                cout << "Files are not equal." << endl;
-                return false;
-            }
+    // Read numbers from the first file and store them in vec1
+    while (getline(stream1, line1)) {
+        istringstream iss(line1);
+        double num;
+        
+        while (iss >> num) {
+            vec1.push_back(num);
         }
+    }
+    // Close the files
+    stream1.close();
 
-        stream1_eof = stream1.eof();
-        stream2_eof = stream2.eof();
+    // Read numbers from the second file and store them in vec2
+    while (getline(stream2, line2)) {
+        istringstream iss(line2);
+        double num;
+        
+        while (iss >> num) {
+            vec2.push_back(num);
+        }
+    }
+    // Close the files
+    stream2.close();
+
+    // Check if the vectors have the same size
+    if (vec1.size() != vec2.size()) {
+        cerr << "Vectors have different sizes!" << endl;
+        return false;
     }
 
-    if (stream1.eof() && stream2.eof()) {
-        cout << "Files are equal." << endl;
-        return true;
+    // Check if each element in the vectors is equal
+    for (int i = 0; i < (int)vec1.size(); ++i) {
+        BOOST_CHECK_SMALL(abs(vec1[i]- vec2[i]), 1e-3);
     }
 
-    cout << "Files are not equal (different number of lines): " << stream1.eof() << " and " << stream2.eof() << endl;
-    return false;
+    return true;
 }
 
 struct MPIFixture {
@@ -225,11 +232,10 @@ BOOST_AUTO_TEST_CASE(SolverCG_file_comparison) {
     int start_y = coords[0] == p - 1 ? 1 : 0;
     int end_y = coords[0] == 0 ? Ny_local - 1 : Ny_local;
 
+    cout << "Rank " << rank << " has x_first = " << x_first << " and x_last = " << x_last << " and y_first = " << y_first << " and y_last = " << y_last << endl;
 
-    MPIGridCommunicator* mpiGridCommunicator = new MPIGridCommunicator(cart_comm, Nx_local, Ny_local, start_x, end_x, start_y, end_y, coords, p);
-
-    // Declare and Initialise the variable "cg"
-    SolverCG* cg = new SolverCG(Nx, Ny, dx, dy, mpiGridCommunicator);
+    MPIGridCommunicator* mpiGridCommunicatorCG = new MPIGridCommunicator(cart_comm, Nx_local, Ny_local, start_x, end_x, start_y, end_y, coords, p);
+    SolverCG* cgCG = new SolverCG(Nx_local, Ny_local, dx, dy, mpiGridCommunicatorCG);
 
     double* v   = new double[Nx_local*Ny_local]();
     double* s   = new double[Nx_local*Ny_local]();
@@ -240,11 +246,26 @@ BOOST_AUTO_TEST_CASE(SolverCG_file_comparison) {
 
     for (int i = x_first; i < x_first + Nx_local; ++i) {
         double var_i = sin(M_PI * k * i * dx);
+
         for (int j = y_first; j < y_first + Ny_local; ++j) {
             double var_j = sin(M_PI * l * j * dy);
             v[IDX(i - x_first,j - y_first)] = -M_PI * M_PI * var1 * var_i * var_j;
         }
     }
+
+    for (int r = 0; r < p*p; r++) {
+        if (rank == r){
+            cout << "Rank " << rank << " has v: " << endl;
+            for (int i = 0; i < Nx_local; ++i) {
+                for (int j = 0; j < Ny_local; ++j) {
+                    cout << v[IDX(i,j)] << " ";
+                } cout << endl;
+            } MPI_Barrier(mpiGridCommunicatorCG->cart_comm);
+        }
+    }
+
+    cout << "Solving Poisson problem using SolverCG" << endl;
+    cgCG->Solve(v, s);
 
     // ofstream file;
     // file.open("TestOutputSolverCG.txt", ios::app);
@@ -264,44 +285,45 @@ BOOST_AUTO_TEST_CASE(SolverCG_file_comparison) {
     // file.close();
 
     // Solve Poisson problem
-    cout << "Solving Poisson problem using SolverCG" << endl;
-    double* outputArray_v = new double[Npts]();
-    double* global_v = new double[Npts]();
+    
+    double* outputArray_s = new double[Npts]();
+    double* global_s = new double[Npts]();
 
-    MPI_Barrier(mpiGridCommunicator->cart_comm);
+    MPI_Barrier(mpiGridCommunicatorCG->cart_comm);
 
     for (int j = y_first; j < y_last; ++j)
     {
         for (int i = x_first; i < x_last; ++i)
         {
-            outputArray_v[IDX_GLOBAL(i, j)] = v[IDX(i - x_first, j - y_first)];
+            outputArray_s[IDX_GLOBAL(i, j)] = s[IDX(i - x_first, j - y_first)];
         }
     }
 
-    MPI_Allreduce(outputArray_v, global_v, Npts, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
-    MPI_Barrier(mpiGridCommunicator->cart_comm);
-
-    cg->Solve(global_v, s);
+    MPI_Allreduce(outputArray_s, global_s, Npts, MPI_DOUBLE, MPI_SUM, mpiGridCommunicatorCG->cart_comm);
+    MPI_Barrier(mpiGridCommunicatorCG->cart_comm);
 
     // Write the solution to file
     // Gather the arrays into actual size
 
-    ofstream file;
-    file.open("TestOutputSolverCG.txt");
-    for (int j = 0; j < Ny; ++j) {
-        for (int i = 0; i < Nx; ++i) {
-            file << s[IDX_GLOBAL(i,j)] << " ";
+    
+
+    if (rank == 0){
+        ofstream file;
+        file.open("TestOutputSolverCG.txt");
+        for (int j = 0; j < Ny; ++j) {
+            for (int i = 0; i < Nx; ++i) {
+                file << global_s[IDX_GLOBAL(i,j)] << " ";
+                cout << global_s[IDX_GLOBAL(i,j)] << " ";
+            }
+            file << endl;
         }
-        file << endl;
+        file.close();
     }
-    file.close();
 
     //Check it against the baseline
     cout << "Testing output files for SolverCG: " << endl;
     BOOST_CHECK(compareFiles("TestOutputSolverCG.txt", "BaselineOutputSolverCG.txt"));
 
-
     // Finalise MPI within the struct
     
- 
 }

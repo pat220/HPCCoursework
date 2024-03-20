@@ -72,6 +72,26 @@ bool compareFiles(const string& file1, const string& file2) {
     return false;
 }
 
+struct MPIFixture {
+    public:
+        explicit MPIFixture() {
+            argc = boost::unit_test::framework::master_test_suite().argc;
+            argv = boost::unit_test::framework::master_test_suite().argv;
+            cout << "Initialising MPI" << endl;
+            MPI_Init(&argc, &argv);
+        }
+
+        ~MPIFixture() {
+            cout << "Finalising MPI" << endl;
+            MPI_Finalize();
+        }
+
+        int argc;
+        char **argv;
+};
+BOOST_GLOBAL_FIXTURE(MPIFixture);
+
+
 // Boost Test Case for file comparison LidDrivenCavitySolver
 BOOST_AUTO_TEST_CASE(LidDrivenCavitySolver_file_comparison) {
 
@@ -89,8 +109,7 @@ BOOST_AUTO_TEST_CASE(LidDrivenCavitySolver_file_comparison) {
     int argc = 2;
     char** argv = new char*[argc];
 
-    // Initialize MPI
-    MPI_Init(NULL, NULL);
+    // Initialise MPI within the struct
 
     // Get the total number of processes and the rank of the current process
     int size, rank;
@@ -147,8 +166,7 @@ BOOST_AUTO_TEST_CASE(SolverCG_file_comparison) {
     double dy = Ly / (Ny-1);
     int Npts = Nx * Ny;
 
-    // Initialize MPI
-    // MPI_Init(NULL, NULL);
+    // Initialise MPI within the struct
 
     // Get the total number of processes and the rank of the current process
     int size, rank;
@@ -210,7 +228,7 @@ BOOST_AUTO_TEST_CASE(SolverCG_file_comparison) {
 
     MPIGridCommunicator* mpiGridCommunicator = new MPIGridCommunicator(cart_comm, Nx_local, Ny_local, start_x, end_x, start_y, end_y, coords, p);
 
-    // Declare and initialize the variable "cg"
+    // Declare and Initialise the variable "cg"
     SolverCG* cg = new SolverCG(Nx, Ny, dx, dy, mpiGridCommunicator);
 
     double* v   = new double[Nx_local*Ny_local]();
@@ -281,10 +299,9 @@ BOOST_AUTO_TEST_CASE(SolverCG_file_comparison) {
     //Check it against the baseline
     cout << "Testing output files for SolverCG: " << endl;
     BOOST_CHECK(compareFiles("TestOutputSolverCG.txt", "BaselineOutputSolverCG.txt"));
-    
-    MPI_Comm_free(&cart_comm);
-    MPI_Finalize();
-    // Finalise MPI
+
+
+    // Finalise MPI within the struct
     
  
 }

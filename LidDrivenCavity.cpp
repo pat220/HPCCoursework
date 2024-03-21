@@ -445,6 +445,7 @@ void LidDrivenCavity::InteriorVorticity(int startX, int endX, int startY, int en
     mpiGridCommunicator->SendReceiveEdges(s, receiveBufferTopS, receiveBufferBottomS, receiveBufferLeftS, receiveBufferRightS); // Initialised this with S not to store more data
 
     // Update the vorticity values using the received data
+    // #pragma omp parallel for collapse(2)    
     for (int i = startX; i < endX; ++i) {
         for (int j = startY; j < endY; ++j) {
             double leftNeighborValue = (coords[1] > 0 && i == 0) ? receiveBufferLeftS[j] : s[IDX(i - 1, j)];
@@ -471,7 +472,7 @@ void LidDrivenCavity::TimeAdvanceVorticity(int startX, int endX, int startY, int
     // int id = omp_get_thread_num();
     // int nthreads = omp_get_num_threads();
 
-    // #pragma omp for schedule(dynamic, 1)
+    //#pragma omp parallel for collapse(2)  
     for (int i = startX; i < endX; i++)
     {
         for (int j = startY; j < endY; j++)

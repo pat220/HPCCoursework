@@ -66,7 +66,7 @@ void SolverCG::Solve(double* b, double* x) {
         return;
     }
 
-    ApplyOperator(x, t); // parallelised inside
+    ApplyOperator(x, t, 0, 1); // parallelised inside
 
     cblas_dcopy(n, b, 1, r, 1);        // r_0 = b (i.e. b)
     ImposeBC(r); // parallelised inside
@@ -74,74 +74,84 @@ void SolverCG::Solve(double* b, double* x) {
     cblas_daxpy(n, -1.0, t, 1, r, 1);
     Precondition(r, z); // parallelised inside
     cblas_dcopy(n, z, 1, k, 1);        // k_0 = r_0
-    
-    g = 0;
-    do {
-        g++;
-        // Perform action of Nabla^2 * p
-        ApplyOperator(k, t); // parallelised inside
-        
-        alpha = cblas_ddot(n, t, 1, k, 1);  // alpha = p_k^T A p_k
-        MPI_Allreduce(&alpha, &alpha_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
 
-        alpha = cblas_ddot(n, r, 1, z, 1) / alpha_global; // compute alpha_k
-        MPI_Allreduce(&alpha, &alpha_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+    int nthreads, threadid;
+    bool shouldBreak = false;
+    #pragma omp parallel default(shared) private(threadid, g)
+    {
+        threadid = omp_get_thread_num();
+        if(threadid==0) { nthreads = omp_get_num_threads(); }
+        g = 0;
+        do {
+            g++;
+            // Perform action of Nabla^2 * p
+            ApplyOperator(k, t, threadid, nthreads); // parallelised inside
+            #pragma omp barrier
+            if(threadid == 0) {
+                alpha = cblas_ddot(n, t, 1, k, 1);  // alpha = p_k^T A p_k
+                MPI_Allreduce(&alpha, &alpha_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
 
-        beta  = cblas_ddot(n, r, 1, z, 1);  // z_k^T r_k
-        MPI_Allreduce(&beta, &beta_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+                alpha = cblas_ddot(n, r, 1, z, 1) / alpha_global; // compute alpha_k
+                MPI_Allreduce(&alpha, &alpha_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
 
-        cblas_daxpy(n,  alpha_global, k, 1, x, 1);  // x_{k+1} = x_k + alpha_k p_k
-        cblas_daxpy(n, -alpha_global, t, 1, r, 1); // r_{k+1} = r_k - alpha_k A p_k
+                beta = cblas_ddot(n, r, 1, z, 1);  // z_k^T r_k
+                MPI_Allreduce(&beta, &beta_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
 
-        // Compute local to global 2norm with dot products
-        dot_local = cblas_ddot(n, r, 1, r, 1);
-        MPI_Allreduce(&dot_local, &dot_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
-        eps = sqrt(dot_global);
-        if (eps < tol*tol) {
-            break;
+                cblas_daxpy(n, alpha_global, k, 1, x, 1);  // x_{k+1} = x_k + alpha_k p_k
+                cblas_daxpy(n, -alpha_global, t, 1, r, 1); // r_{k+1} = r_k - alpha_k A p_k
+
+                // Compute local to global 2norm with dot products
+                dot_local = cblas_ddot(n, r, 1, r, 1);
+                MPI_Allreduce(&dot_local, &dot_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+                eps = sqrt(dot_global);
+                if (eps < tol * tol) {
+                    shouldBreak = true;
+                }
+
+                Precondition(r, z);
+
+                beta = cblas_ddot(n, r, 1, z, 1) / beta_global;
+                MPI_Allreduce(&beta, &beta_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+                // cout << rank << " beta2 is: in g = " << beta << endl;
+
+                cblas_dcopy(n, z, 1, t, 1);
+                cblas_daxpy(n, beta_global, k, 1, t, 1);
+                cblas_dcopy(n, t, 1, k, 1);
+            }
+            #pragma omp barrier
+            if(shouldBreak){ break; }
+        } while (g < 5000); // Set a maximum number of iterations
+
+        if (threadid == 0 && g == 5000) {
+            cout << "FAILED TO CONVERGE" << endl;
+            exit(-1);
         }
-        
-        Precondition(r, z);
-
-        beta = cblas_ddot(n, r, 1, z, 1) / beta_global;
-        MPI_Allreduce(&beta, &beta_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
-        // cout << rank << " beta2 is: in g = " << beta << endl;
-
-        cblas_dcopy(n, z, 1, t, 1);
-        cblas_daxpy(n, beta_global, k, 1, t, 1);
-        cblas_dcopy(n, t, 1, k, 1);
-
-    } while (g < 5000); // Set a maximum number of iterations
-
-    if (g == 5000) {
-        cout << "FAILED TO CONVERGE" << endl;
-        exit(-1);
     }
-
     // cout << "Converged in " << g << " iterations. eps = " << eps << endl; // commented out to test time only
-
 }
 
-void SolverCG::ApplyOperator(double* in, double* out) {
-    
+void SolverCG::ApplyOperator(double* in, double* out, int threadid, int nthreads) {
     // Obtain start and end points to yield results from 1 to < Nx/Ny -1
     int start_x = mpiGridCommunicator->start_x;
     int end_x = mpiGridCommunicator->end_x;
     int start_y = mpiGridCommunicator->start_y;
     int end_y = mpiGridCommunicator->end_y;
 
-    int rank;
-    MPI_Comm_rank(mpiGridCommunicator->cart_comm, &rank);
-    // cout << "Rank " << rank << " has start_x = " << start_x << " and end_x = " << end_x << " and start_y = " << start_y << " and end_y = " << end_y << endl;
-    
-    mpiGridCommunicator->SendReceiveEdges(in, receiveBufferTop, receiveBufferBottom, receiveBufferLeft, receiveBufferRight);
+    if(threadid == 0){
+        int rank;
+        MPI_Comm_rank(mpiGridCommunicator->cart_comm, &rank);
+        // cout << "Rank " << rank << " has start_x = " << start_x << " and end_x = " << end_x << " and start_y = " << start_y << " and end_y = " << end_y << endl;
+        mpiGridCommunicator->SendReceiveEdges(in, receiveBufferTop, receiveBufferBottom, receiveBufferLeft, receiveBufferRight);
+    }
+
+    #pragma omp barrier
 
     // Assume ordered with y-direction fastest (column-by-column)
     double dx2i = 1.0/dx/dx;
     double dy2i = 1.0/dy/dy;
-    for (int j = start_y; j < end_y; ++j) {
-        for (int i = start_x; i < end_x; ++i) {
-
+    for (int i = start_x+threadid; i < end_x; i += nthreads) {
+        for (int j = start_y; j < end_y; ++j) {
+        
             double leftNeighborValueV = (coords[1] > 0 && i == 0) ? receiveBufferLeft[j] : in[IDX(i - 1, j)];
             double rightNeighborValueV = (coords[1] < p - 1 && i == Nx_local-1) ? receiveBufferRight[j] : in[IDX(i + 1, j)];
             double botomNeighborValueV = (coords[0] < p - 1 && j == 0) ? receiveBufferBottom[i] : in[IDX(i, j - 1)];
@@ -155,7 +165,6 @@ void SolverCG::ApplyOperator(double* in, double* out) {
                               -     botomNeighborValueV)*dy2i;
 
             // cout << rank << " has out[" << i << "][" << j << "] = " << out[IDX(i,j)] << endl;
-          
         }
     }
 }

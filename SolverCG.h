@@ -31,7 +31,7 @@ private:
     double* receiveBufferLeft = nullptr;
     double* receiveBufferRight = nullptr;
 
-    void ApplyOperator(double* k, double* t);
+    void ApplyOperator(double* k, double* t, int threadid, int nthreads);
     void Precondition(double* k, double* t);
     void ImposeBC(double* k);
     void InitialiseBuffers();

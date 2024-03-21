@@ -1,5 +1,5 @@
 CXX = mpicxx -fopenmp
-CXXFLAGS = -std=c++11 -Wall -O2
+CXXFLAGS = -std=c++11 -Wall -O3
 HDRS = SolverCG.h LidDrivenCavity.h MPIGridCommunicator.h
 OBJS = SolverCG.o LidDrivenCavity.o MPIGridCommunicator.o
 OBJS_MAIN = LidDrivenCavitySolver.o

@@ -91,7 +91,7 @@ void LidDrivenCavity::SetLocalVariables(int Nx, int Ny, int p, int* coords)
     int min_points_x = (Nx - extra_x) / p;
     int min_points_y = (Ny - extra_y) / p;
 
-    // Calculate the starting and ending points of each process
+    // Calculate the starting and ending points of each process in global coordinates
     if (coords[1] < extra_x)
     {
         min_points_x++;
@@ -123,7 +123,7 @@ void LidDrivenCavity::SetLocalVariables(int Nx, int Ny, int p, int* coords)
     UpdateDxDy();
 }
 
-/// @brief  Initialise the MPI grid communicator and the conjugate gradient solver. Also initialise the local arrays for each process (v, vnew, s, tmp), the buffers for the communication and the start and end points of each subgrid so that in the global grid the mathematical expressions go from 1 to < Nx/Ny - 1
+/// @brief  Initialise the MPI grid communicator and the conjugate gradient solver. Also initialise the local arrays for each process (v, vnew, s), the buffers for the communication and the start and end points of each subgrid so that in the global grid the mathematical expressions go from 1 to < Nx/Ny - 1
 /// @param  comm    MPI communicator
 /// @param  coords  Coordinates of the current process in the cartesian grid
 /// @param  p       Square root of number of processes (pxp grid)
@@ -138,23 +138,24 @@ void LidDrivenCavity::Initialise(MPI_Comm comm, int *coords, int p)
     int start_y = coords[0] == p - 1 ? 1 : 0;
     int end_y = coords[0] == 0 ? Ny_local - 1 : Ny_local;
     
-
+    // Set up the MPI grid communicator and the conjugate gradient solver
     mpiGridCommunicator = new MPIGridCommunicator(comm, Nx_local, Ny_local, start_x, end_x, start_y, end_y, coords, p);
     cg = new SolverCG(Nx_local, Ny_local, dx, dy, mpiGridCommunicator);
     this->coords = coords;
     this->p = p;
 
+    // Set up the local arrays
     v = new double[Npts_local](); // local
     vnew = new double[Npts_local](); // local
     s = new double[Npts_local](); // local
-    tmp = new double[Npts_local]();
     
 }
 
 /// @brief  Integrate the vorticity field by advancing it in time as many times as NSteps
 /// @note   SolverCG is called to solve for the stream function inside
 void LidDrivenCavity::Integrate()
-{
+{   
+    // Calculate the number of time steps and integrate the vorticity field
     int NSteps = ceil(T / dt);
     for (int t = 0; t < NSteps; ++t)
     {
@@ -174,16 +175,19 @@ void LidDrivenCavity::WriteSolution(std::string file)
     int rank;
     MPI_Comm_rank(mpiGridCommunicator->cart_comm, &rank);
 
+    // Start and ending points for the interior vorticity so that it goes from 1 to < Nx/Ny - 1 from mpiGridCommunicator
     int start_x = mpiGridCommunicator->start_x;
     int end_x = mpiGridCommunicator->end_x;
     int start_y = mpiGridCommunicator->start_y;
     int end_y = mpiGridCommunicator->end_y;
 
+    // Create the x-direction and y-direciton velocity arrays
     double *u0 = new double[Nx_local * Ny_local]();
     double *u1 = new double[Nx_local * Ny_local]();
 
     mpiGridCommunicator->SendReceiveEdges(s, receiveBufferTopS, receiveBufferBottomS, receiveBufferLeftS, receiveBufferRightS); // Initialised this with S not to store more data
 
+    // Calculate the x-direction and y-direction velocity arrays
     for (int j = start_y; j < end_y; ++j)
     {
         for (int i = start_x; i < end_x; ++i)
@@ -196,6 +200,7 @@ void LidDrivenCavity::WriteSolution(std::string file)
         }
     }
 
+    // Set the boundary conditions for the x-direction velocity
     if (coords[0] == 0){
         for (int i = 0; i < Nx_local; ++i)
         {
@@ -203,7 +208,8 @@ void LidDrivenCavity::WriteSolution(std::string file)
         }
     } 
 
-
+    // Create the output arrays, where the outputArray is the global array used by each rank
+    // (populated with 0 everywhere but where the local array is) and the global array is the array with the overall values of the grid
     double* outputArray_u0 = new double[Npts]();
     double* outputArray_u1 = new double[Npts]();
     double* outputArray_v = new double[Npts]();
@@ -217,6 +223,7 @@ void LidDrivenCavity::WriteSolution(std::string file)
     MPI_Request request;
     MPI_Barrier(mpiGridCommunicator->cart_comm);
 
+    // Send the local arrays to the output arrays
     for (int j = y_first; j < y_last; ++j)
     {
         for (int i = x_first; i < x_last; ++i)
@@ -230,6 +237,7 @@ void LidDrivenCavity::WriteSolution(std::string file)
 
     MPI_Barrier(mpiGridCommunicator->cart_comm);
     
+    // Reduce the output arrays to the global arrays
     MPI_Allreduce(outputArray_u0, global_u0, Npts, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
     MPI_Allreduce(outputArray_u1, global_u1, Npts, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
     MPI_Allreduce(outputArray_v, global_v, Npts, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
@@ -237,6 +245,7 @@ void LidDrivenCavity::WriteSolution(std::string file)
     MPI_Barrier(mpiGridCommunicator->cart_comm);
 
 
+    // Write the solution to a file
     if (rank == 0){
         std::ofstream f(file.c_str());
         std::cout << "Writing file " << file << std::endl;
@@ -299,7 +308,6 @@ void LidDrivenCavity::CleanUp()
         delete[] v;
         delete[] vnew;
         delete[] s;
-        delete[] tmp;
         delete cg;
         delete mpiGridCommunicator;
     }
@@ -323,25 +331,24 @@ void LidDrivenCavity::Advance()
     this->dx2i = 1.0 / dx / dx;
     this->dy2i = 1.0 / dy / dy;
 
-    // Boundary node vorticity
-    // Cheking if the process is a corner and take that into account for the starting and end points
-    // First checking "insider" ranks within the border of the grid
+    // Parallelising using OpenMP
     int nthreads, threadid;
+    int start_x, end_x, start_y, end_y;
     #pragma omp parallel default(shared) private(threadid)
     {
         threadid = omp_get_thread_num();
         if(threadid==0) {
             nthreads = omp_get_num_threads();
+
+            // Start and ending points for the interior vorticity so that it goes from 1 to < Nx/Ny - 1
+            start_x = mpiGridCommunicator->start_x;
+            end_x = mpiGridCommunicator->end_x;
+            start_y = mpiGridCommunicator->start_y;
+            end_y = mpiGridCommunicator->end_y;
         }
 
-        NodeVorticity(threadid, nthreads);
+        NodeVorticity(start_x, end_x, start_y, end_y, threadid, nthreads);
         #pragma omp barrier
-
-        // Start and ending points for the interior vorticity so that it goes from 1 to < Nx/Ny - 1
-        int start_x = mpiGridCommunicator->start_x;
-        int end_x = mpiGridCommunicator->end_x;
-        int start_y = mpiGridCommunicator->start_y;
-        int end_y = mpiGridCommunicator->end_y;
 
         InteriorVorticity(start_x, end_x, start_y, end_y, threadid, nthreads); // change vnew
         #pragma omp barrier
@@ -391,113 +398,95 @@ void LidDrivenCavity::CleanUpBuffers()
 /// @brief  Calculate the vorticity at the boundary nodes with its corresponding mathematical expression
 /// @param  threadid    Thread id
 /// @param  nthreads    Number of threads
-void LidDrivenCavity::NodeVorticity( int threadid, int nthreads)
+void LidDrivenCavity::NodeVorticity(int startX, int endX, int startY, int endY, int threadid, int nthreads)
 {   
-    // int rank;
-    // MPI_Comm_rank(mpiGridCommunicator->cart_comm, &rank);
 
-    // cout << "Process " << rank << " coordinates: (" << coords[0] << ", " << coords[1] << ")" << endl;
     // Corners first
-
-    #pragma omp barrier
-    if (coords[0] == 0 && coords[1] == 0)
+    if (coords[0] == 0 && coords[1] == 0) // top left
     {
-        
-        for (int i = 1+threadid; i < Nx_local; i += nthreads)
+        for (int i = startX+threadid; i < endX; i += nthreads)
         {
-            // top
             vnew[IDX(i, Ny_local - 1)] = 2.0 * dy2i * (s[IDX(i, Ny_local - 1)] - s[IDX(i, Ny_local - 2)]) - 2.0 * dyi * U;
         }
-
-        for (int j = 0+threadid; j < Ny_local-1; j += nthreads)
+        for (int j = startY+threadid; j < endY; j += nthreads)
         {
-            // left
             vnew[IDX(0, j)] = 2.0 * dx2i * (s[IDX(0, j)] - s[IDX(1, j)]);
         }
     }
     #pragma omp barrier
     
-    if (coords[0] == 0 && coords[1] == p - 1)
+    if (coords[0] == 0 && coords[1] == p - 1) // top right
     {
-        for (int i = 0+threadid; i < Nx_local-1; i += nthreads)
+        for (int i = startX+threadid; i < endX; i += nthreads)
         {
-            // top
             vnew[IDX(i, Ny_local - 1)] = 2.0 * dy2i * (s[IDX(i, Ny_local - 1)] - s[IDX(i, Ny_local - 2)]) - 2.0 * dyi * U;
         }
-        for (int j = 0+threadid; j < Ny_local-1; j += nthreads)
+        for (int j = startY+threadid; j < endY; j += nthreads)
         {
-            // right
             vnew[IDX(Nx_local - 1, j)] = 2.0 * dx2i * (s[IDX(Nx_local - 1, j)] - s[IDX(Nx_local - 2, j)]);
         }
     }
     #pragma omp barrier
     
-    if (coords[0] == p - 1 && coords[1] == 0)
+    if (coords[0] == p - 1 && coords[1] == 0) // bottom left
     {
-        for (int i = 1+threadid; i < Nx_local; i += nthreads)
+        for (int i = startX+threadid; i < endX; i += nthreads)
         {
-            // bottom
             vnew[IDX(i, 0)] = 2.0 * dy2i * (s[IDX(i, 0)] - s[IDX(i, 1)]);
         }
-        for (int j = 1+threadid; j < Ny_local; j += nthreads)
+        for (int j = startY+threadid; j < endY; j += nthreads)
         {
-            // left
             vnew[IDX(0, j)] = 2.0 * dx2i * (s[IDX(0, j)] - s[IDX(1, j)]);
         }
     }
     #pragma omp barrier
     
-    if (coords[0] == p - 1 && coords[1] == p - 1)
+    if (coords[0] == p - 1 && coords[1] == p - 1) // bottom right
     {
-        for (int i = 0; i < Nx_local-1; i += nthreads)
+        for (int i = startX; i < endX; i += nthreads)
         {
-            // bottom
             vnew[IDX(i, 0)] = 2.0 * dy2i * (s[IDX(i, 0)] - s[IDX(i, 1)]);
         }
-        for (int j = 1+threadid; j < Ny_local; j += nthreads)
+        for (int j = startY+threadid; j < endY; j += nthreads)
         {
-            // right
             vnew[IDX(Nx_local - 1, j)] = 2.0 * dx2i * (s[IDX(Nx_local - 1, j)] - s[IDX(Nx_local - 2, j)]);
         }
     }
     #pragma omp barrier
+
 
     // Edges
-    if (coords[0] == 0 && !(coords[1] == 0 || coords[1] == p - 1))
+    if (coords[0] == 0 && !(coords[1] == 0 || coords[1] == p - 1)) // top
     {
-        for (int i = 0+threadid; i < Nx_local; i += nthreads)
+        for (int i = startX+threadid; i < endX; i += nthreads)
         {
-            // top
             vnew[IDX(i, Ny_local - 1)] = 2.0 * dy2i * (s[IDX(i, Ny_local - 1)] - s[IDX(i, Ny_local - 2)]) - 2.0 * dyi * U;
         }
     }
     #pragma omp barrier
     
-    if (coords[0] == p - 1 && !(coords[1] == 0 || coords[1] == p - 1))
+    if (coords[0] == p - 1 && !(coords[1] == 0 || coords[1] == p - 1)) //bottom
     {
-        for (int i = 0+threadid; i < Nx_local; i += nthreads)
+        for (int i = startX+threadid; i < endX; i += nthreads)
         {
-            // bottom
             vnew[IDX(i, 0)] = 2.0 * dy2i * (s[IDX(i, 0)] - s[IDX(i, 1)]);
         }
     }
     #pragma omp barrier
     
-    if (coords[1] == 0 && !(coords[0] == 0 || coords[0] == p - 1))
+    if (coords[1] == 0 && !(coords[0] == 0 || coords[0] == p - 1)) // left
     {
-        for (int j = 0+threadid; j < Ny_local; j += nthreads)
+        for (int j = startY+threadid; j < endY; j += nthreads)
         {
-            // left
             vnew[IDX(0, j)] = 2.0 * dx2i * (s[IDX(0, j)] - s[IDX(1, j)]);
         }
     }
     #pragma omp barrier
     
-    if (coords[1] == p - 1 && !(coords[0] == 0 || coords[0] == p - 1))
+    if (coords[1] == p - 1 && !(coords[0] == 0 || coords[0] == p - 1)) // right
     {
-        for (int j = 0+threadid; j < Ny_local; j += nthreads)
+        for (int j = startY+threadid; j < endY; j += nthreads)
         {
-            // right
             vnew[IDX(Nx_local - 1, j)] = 2.0 * dx2i * (s[IDX(Nx_local - 1, j)] - s[IDX(Nx_local - 2, j)]);
         }
     }
@@ -537,7 +526,6 @@ void LidDrivenCavity::InteriorVorticity(int startX, int endX, int startY, int en
 /// @param  endY    Ending y-coordinate (Ny_local - 1 or Ny_local depending on the rank to ensure globally the mathematical expression goes from 1 to < Nx/Ny - 1)
 void LidDrivenCavity::TimeAdvanceVorticity(int startX, int endX, int startY, int endY, int threadid, int nthreads)
 {   
-    
     // Send and receive the edges of the local domain
     mpiGridCommunicator->SendReceiveEdges(vnew, receiveBufferTopV, receiveBufferBottomV, receiveBufferLeftV, receiveBufferRightV);
     mpiGridCommunicator->SendReceiveEdges(s, receiveBufferTopS, receiveBufferBottomS, receiveBufferLeftS, receiveBufferRightS);

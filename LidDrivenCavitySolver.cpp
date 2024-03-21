@@ -20,8 +20,6 @@ namespace po = boost::program_options;
 
 int main(int argc, char **argv)
 {
-    // Set the number of threads to be used by OpenMP in terminal with the following command:
-    // OMP_NUM_THREADS=...
 
     po::options_description opts(
         "Solver for the 2D lid-driven cavity incompressible flow problem");
@@ -48,6 +46,7 @@ int main(int argc, char **argv)
     po::notify(vm);
 
     if (vm.count("help")) {
+        // Print help message
         cout << opts << endl;
         return 0;
     }
@@ -60,6 +59,7 @@ int main(int argc, char **argv)
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
+    // Print error message if the number of processes is not a perfect square or exceeds 16
     if (sqrt(size) != floor(sqrt(size)) || size > 16) {
         if (rank == 0) {
             cout << "The number of processes must be a perfect square and less or equal to 16" << endl;
@@ -69,7 +69,7 @@ int main(int argc, char **argv)
     }
 
     // Create a Cartesian topology
-    int p = sqrt(size);
+    int p = sqrt(size); // Number of processes in each dimension
     int dims[2] = {p, p};  // pxp grid
     int periods[2] = {0, 0};  // No periodicity
     int coords[2];
@@ -77,26 +77,31 @@ int main(int argc, char **argv)
     MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, 0, &cart_comm);
     MPI_Cart_coords(cart_comm, rank, 2, coords);
 
-    // Print the rank and coordinates of each process
-    // cout << "Process " << rank << " coordinates: (" << coords[0] << ", " << coords[1] << ")" << endl;
-
+    // Create the solver object
     LidDrivenCavity* solver = new LidDrivenCavity();
+
+    // Set the parameters
     solver->SetDomainSize(vm["Lx"].as<double>(), vm["Ly"].as<double>());
     solver->SetGridSize(vm["Nx"].as<int>(),vm["Ny"].as<int>());
     solver->SetTimeStep(vm["dt"].as<double>());
     solver->SetFinalTime(vm["T"].as<double>());
     solver->SetReynoldsNumber(vm["Re"].as<double>());
     solver->SetLocalVariables(vm["Nx"].as<int>(), vm["Ny"].as<int>(), p, coords);
-    
+
+    // Initialise the solver
     solver->Initialise(cart_comm, coords, p);
 
+    // Print the parameters
     solver->WriteSolution("ic.txt");
 
+    // Integrate in time    
     solver->Integrate();
 
+    // Write the final solution
     solver->WriteSolution("final.txt");
 
-    delete solver; // Release the allocated memory
+    // Release the allocated memory
+    delete solver; 
 
     // Finalise MPI
     MPI_Comm_free(&cart_comm);

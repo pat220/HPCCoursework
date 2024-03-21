@@ -66,29 +66,23 @@ void SolverCG::Solve(double* b, double* x) {
         return;
     }
 
+    ApplyOperator(x, t, 0, 1); // parallelised inside
+
+    cblas_dcopy(n, b, 1, r, 1);        // r_0 = b (i.e. b)
+    ImposeBC(r); // parallelised inside
+
+    cblas_daxpy(n, -1.0, t, 1, r, 1);
+    Precondition(r, z); // parallelised inside
+    cblas_dcopy(n, z, 1, k, 1);        // k_0 = r_0
+
     int nthreads, threadid;
     bool shouldBreak = false;
     #pragma omp parallel default(shared) private(threadid, g)
     {
         threadid = omp_get_thread_num();
-        if(threadid==0) { nthreads = omp_get_num_threads(); }
-        #pragma omp barrier
-        ApplyOperator(x, t, threadid, nthreads); // parallelised inside
-        #pragma omp barrier
-
-        cblas_dcopy(n, b, 1, r, 1);        // r_0 = b (i.e. b)
-        #pragma omp barrier
-        ImposeBC(r, threadid, nthreads); // parallelised inside
-        #pragma omp barrier
-
-        if(threadid==0)
-        {
-            cblas_daxpy(n, -1.0, t, 1, r, 1);
-            Precondition(r, z); // parallelised inside
-            cblas_dcopy(n, z, 1, k, 1);        // k_0 = r_0
-        }
-
-        #pragma omp barrier
+        if(threadid==0) {
+            nthreads = omp_get_num_threads();
+            }
         g = 0;
         do {
             g++;
@@ -97,6 +91,7 @@ void SolverCG::Solve(double* b, double* x) {
             #pragma omp barrier
             ApplyOperator(k, t, threadid, nthreads); // parallelised inside
             #pragma omp barrier
+
             if(threadid == 0) {
                 alpha = cblas_ddot(n, t, 1, k, 1);  // alpha = p_k^T A p_k
                 MPI_Allreduce(&alpha, &alpha_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
@@ -153,15 +148,14 @@ void SolverCG::ApplyOperator(double* in, double* out, int threadid, int nthreads
         // cout << "Rank " << rank << " has start_x = " << start_x << " and end_x = " << end_x << " and start_y = " << start_y << " and end_y = " << end_y << endl;
         mpiGridCommunicator->SendReceiveEdges(in, receiveBufferTop, receiveBufferBottom, receiveBufferLeft, receiveBufferRight);
     }
-
+    
     #pragma omp barrier
 
     // Assume ordered with y-direction fastest (column-by-column)
     double dx2i = 1.0/dx/dx;
     double dy2i = 1.0/dy/dy;
-    for (int i = start_x+threadid; i < end_x; i += nthreads) {
-        for (int j = start_y; j < end_y; ++j) {
-        
+    for (int j = start_y+threadid; j < end_y; j += nthreads) {
+        for (int i = start_x; i < end_x; ++i) {
             double leftNeighborValueV = (coords[1] > 0 && i == 0) ? receiveBufferLeft[j] : in[IDX(i - 1, j)];
             double rightNeighborValueV = (coords[1] < p - 1 && i == Nx_local-1) ? receiveBufferRight[j] : in[IDX(i + 1, j)];
             double botomNeighborValueV = (coords[0] < p - 1 && j == 0) ? receiveBufferBottom[i] : in[IDX(i, j - 1)];
@@ -248,34 +242,33 @@ void SolverCG::CleanUpBuffers()
     }
 }
 
-void SolverCG::ImposeBC(double* inout, int threadid, int nthreads) {
+void SolverCG::ImposeBC(double* inout) {
     // Boundaries
-
 
     if (coords[0] == 0) // top
     {
-        for (int i = 0+threadid; i < Nx_local; i += nthreads) {
+        for (int i = 0; i < Nx_local; ++i) {
             inout[IDX(i, Ny_local-1)] = 0.0;
         }
     }
     
     if (coords[0] == p - 1) // bottom
     {
-        for (int i = 0+threadid; i < Nx_local; i += nthreads) {
+        for (int i = 0; i < Nx_local; ++i) {
             inout[IDX(i, 0)] = 0.0;
         }
     }
     
     if (coords[1] == 0) // left
     {
-        for (int j = 0+threadid; j < Ny_local; j += nthreads) {
+        for (int j = 0; j < Ny_local; ++j) {
             inout[IDX(0, j)] = 0.0;
         }
     }
     
     if (coords[1] == p - 1) // right
     {
-        for (int j = 0+threadid; j < Ny_local; j += nthreads) {
+        for (int j = 0; j < Ny_local; ++j) {
             inout[IDX(Nx_local-1, j)] = 0.0;
         }
     }

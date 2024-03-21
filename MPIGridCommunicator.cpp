@@ -3,9 +3,21 @@
 #include <iostream>
 using namespace std;
 
-
 #define IDX(I, J) ((J) * Nx_local + (I))
 
+/// @class MPIGridCommunicator
+/// @brief Class to communicate between ranks in the grid. It holds 8 arrays to store the sending buffers and store the receiving buffers. The 4 receiving buffers are used by classes outside
+
+/// @brief Constructor for the MPIGridCommunicator class. Hold the parameters and creates the buffers to send.
+/// @param comm MPI communicator
+/// @param Nx_local Number of subgrid points in x direction for the rank
+/// @param Ny_local Number of subgrid points in y direction for the rank
+/// @param start_x Starting index in x direction for the rank (1 or 0 depending on the rank to ensure globally the mathematical expression goes from 1 to < Nx/Ny - 1)
+/// @param end_x Ending index in x direction for the rank (Nx_local - 1 or Nx_local depending on the rank to ensure globally the mathematical expression goes from 1 to < Nx/Ny - 1)
+/// @param start_y Starting index in y direction for the rank (1 or 0 depending on the rank to ensure globally the mathematical expression goes from 1 to < Nx/Ny - 1)
+/// @param end_y Ending index in y direction for the rank (Nx_local - 1 or Nx_local depending on the rank to ensure globally the mathematical expression goes from 1 to < Nx/Ny - 1)
+/// @param coords Coordinates of the rank in the cartesian communicator
+/// @param p Grid size (pxp grid)
 MPIGridCommunicator::MPIGridCommunicator(MPI_Comm comm, int Nx_local, int Ny_local, int start_x, int end_x, int start_y, int end_y, int* coords, int p)
     : cart_comm(comm), Nx_local(Nx_local), Ny_local(Ny_local), start_x(start_x), end_x(end_x), start_y(start_y), end_y(end_y), coords(coords), p(p)
 {
@@ -17,6 +29,7 @@ MPIGridCommunicator::MPIGridCommunicator(MPI_Comm comm, int Nx_local, int Ny_loc
     
 }
 
+/// @brief Destructor for the MPIGridCommunicator class. Cleans the buffers
 MPIGridCommunicator::~MPIGridCommunicator()
 {
     delete[] sendBufferTop;
@@ -25,6 +38,12 @@ MPIGridCommunicator::~MPIGridCommunicator()
     delete[] sendBufferRight;
 }
 
+/// @brief Send and receive the edges of the subgrid to the neighbouring ranks
+/// @param varArray Array of the variable to send
+/// @param receiveBufferTop Buffer to store the received data from the top rank
+/// @param receiveBufferBottom Buffer to store the received data from the bottom rank
+/// @param receiveBufferLeft Buffer to store the received data from the left rank
+/// @param receiveBufferRight Buffer to store the received data from the right rank
 void MPIGridCommunicator::SendReceiveEdges(const double* varArray, double* receiveBufferTop, double* receiveBufferBottom, double* receiveBufferLeft, double* receiveBufferRight)
 {
     int bottomRank, topRank, rightRank, leftRank;

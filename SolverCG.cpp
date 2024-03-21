@@ -17,6 +17,15 @@ using namespace std;
 #define IDX(I, J) ((J) * Nx_local + (I))
 #define IDX_GLOBAL(I, J) ((J) * Nx + (I))
 
+/// @class SolverCG
+/// @brief Class to solve the mathematical expression using the Conjugate Gradient method
+
+/// @brief Construct a new SolverCG::SolverCG object
+/// @param pNx Number of grid points in x direction
+/// @param pNy Number of grid points in y direction
+/// @param pdx Grid spacing in x direction
+/// @param pdy Grid spacing in y direction
+/// @param mpiGridCommunicator Communicator object, another class used to communicate between ranks
 SolverCG::SolverCG(int pNx, int pNy, double pdx, double pdy, MPIGridCommunicator* mpiGridCommunicator)
     : p(mpiGridCommunicator->p), coords(mpiGridCommunicator->coords), mpiGridCommunicator(mpiGridCommunicator)
 {
@@ -37,6 +46,7 @@ SolverCG::SolverCG(int pNx, int pNy, double pdx, double pdy, MPIGridCommunicator
 
 }
 
+/// @brief Destroy the SolverCG::SolverCG object
 SolverCG::~SolverCG()
 {
     delete[] r;
@@ -45,6 +55,9 @@ SolverCG::~SolverCG()
     delete[] t;
 }
 
+/// @brief Solve the mathematical expression using the Conjugate Gradient method
+/// @param b Right hand side of the equation (vorticity)
+/// @param x Solution to the equation (stream function)
 void SolverCG::Solve(double* b, double* x) {
 
     unsigned int n = Nx_local*Ny_local;
@@ -136,6 +149,11 @@ void SolverCG::Solve(double* b, double* x) {
     // cout << "Converged in " << g << " iterations. eps = " << eps << endl; // commented out to test time only
 }
 
+/// @brief Apply the operator to the input vector
+/// @param in Input vector
+/// @param out Output vector
+/// @param threadid Thread ID
+/// @param nthreads Number of threads
 void SolverCG::ApplyOperator(double* in, double* out, int threadid, int nthreads) {
     // Obtain start and end points to yield results from 1 to < Nx/Ny -1
     int start_x = mpiGridCommunicator->start_x;
@@ -174,11 +192,15 @@ void SolverCG::ApplyOperator(double* in, double* out, int threadid, int nthreads
     }
 }
 
+/// @brief Apply the preconditioner to the input vector
+/// @param in Input vector
+/// @param out Output vector
+/// @brief Apply a factor to the inner points
 void SolverCG::Precondition(double* in, double* out) {
     int i, j;
     double dx2i = 1.0/dx/dx;
     double dy2i = 1.0/dy/dy;
-    double factor = 2.0*(dx2i + dy2i);
+    double factor = 1.0/2.0/(dx2i + dy2i);
 
     int start_x = mpiGridCommunicator->start_x;
     int end_x = mpiGridCommunicator->end_x;
@@ -187,7 +209,7 @@ void SolverCG::Precondition(double* in, double* out) {
 
     for (j = start_y; j < end_y; ++j) {
         for (i = start_x; i < end_x; ++i) {
-            out[IDX(i,j)] = in[IDX(i,j)]/factor;
+            out[IDX(i,j)] = in[IDX(i,j)]*factor;
         }
     }
 
@@ -221,6 +243,7 @@ void SolverCG::Precondition(double* in, double* out) {
     }
 }
 
+/// @brief Initialise the buffers
 void SolverCG::InitialiseBuffers()
 {
     CleanUpBuffers();
@@ -231,6 +254,7 @@ void SolverCG::InitialiseBuffers()
     receiveBufferRight = new double[Ny_local];
 }
 
+/// @brief Clean up the buffers
 void SolverCG::CleanUpBuffers()
 {
     if (receiveBufferTop)
@@ -243,6 +267,8 @@ void SolverCG::CleanUpBuffers()
     }
 }
 
+/// @brief Impose the boundary conditions
+/// @param inout Input and output vector. The boundary conditions are imposed on this vector
 void SolverCG::ImposeBC(double* inout) {
     // Boundaries
 

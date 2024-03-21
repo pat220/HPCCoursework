@@ -66,24 +66,33 @@ void SolverCG::Solve(double* b, double* x) {
         return;
     }
 
-    ApplyOperator(x, t, 0, 1); // parallelised inside
-
-    cblas_dcopy(n, b, 1, r, 1);        // r_0 = b (i.e. b)
-    ImposeBC(r); // parallelised inside
-
-    cblas_daxpy(n, -1.0, t, 1, r, 1);
-    Precondition(r, z); // parallelised inside
-    cblas_dcopy(n, z, 1, k, 1);        // k_0 = r_0
-
     int nthreads, threadid;
     bool shouldBreak = false;
     #pragma omp parallel default(shared) private(threadid, g)
     {
         threadid = omp_get_thread_num();
         if(threadid==0) { nthreads = omp_get_num_threads(); }
+        #pragma omp barrier
+        ApplyOperator(x, t, threadid, nthreads); // parallelised inside
+        #pragma omp barrier
+
+        cblas_dcopy(n, b, 1, r, 1);        // r_0 = b (i.e. b)
+        #pragma omp barrier
+        ImposeBC(r, threadid, nthreads); // parallelised inside
+        #pragma omp barrier
+
+        if(threadid==0)
+        {
+            cblas_daxpy(n, -1.0, t, 1, r, 1);
+            Precondition(r, z); // parallelised inside
+            cblas_dcopy(n, z, 1, k, 1);        // k_0 = r_0
+        }
+
+        #pragma omp barrier
         g = 0;
         do {
             g++;
+
             // Perform action of Nabla^2 * p
             #pragma omp barrier
             ApplyOperator(k, t, threadid, nthreads); // parallelised inside
@@ -181,8 +190,8 @@ void SolverCG::Precondition(double* in, double* out) {
     int start_y = mpiGridCommunicator->start_y;
     int end_y = mpiGridCommunicator->end_y;
 
-    for (i = start_x; i < end_x; ++i) {
-        for (j = start_y; j < end_y; ++j) {
+    for (j = start_y; j < end_y; ++j) {
+        for (i = start_x; i < end_x; ++i) {
             out[IDX(i,j)] = in[IDX(i,j)]/factor;
         }
     }
@@ -239,33 +248,34 @@ void SolverCG::CleanUpBuffers()
     }
 }
 
-void SolverCG::ImposeBC(double* inout) {
+void SolverCG::ImposeBC(double* inout, int threadid, int nthreads) {
     // Boundaries
+
 
     if (coords[0] == 0) // top
     {
-        for (int i = 0; i < Nx_local; ++i) {
+        for (int i = 0+threadid; i < Nx_local; i += nthreads) {
             inout[IDX(i, Ny_local-1)] = 0.0;
         }
     }
     
     if (coords[0] == p - 1) // bottom
     {
-        for (int i = 0; i < Nx_local; ++i) {
+        for (int i = 0+threadid; i < Nx_local; i += nthreads) {
             inout[IDX(i, 0)] = 0.0;
         }
     }
     
     if (coords[1] == 0) // left
     {
-        for (int j = 0; j < Ny_local; ++j) {
+        for (int j = 0+threadid; j < Ny_local; j += nthreads) {
             inout[IDX(0, j)] = 0.0;
         }
     }
     
     if (coords[1] == p - 1) // right
     {
-        for (int j = 0; j < Ny_local; ++j) {
+        for (int j = 0+threadid; j < Ny_local; j += nthreads) {
             inout[IDX(Nx_local-1, j)] = 0.0;
         }
     }

@@ -33,7 +33,7 @@ private:
 
     void ApplyOperator(double* k, double* t, int threadid, int nthreads);
     void Precondition(double* k, double* t);
-    void ImposeBC(double* k);
+    void ImposeBC(double* k, int threadid, int nthreads);
     void InitialiseBuffers();
     void CleanUpBuffers();
 

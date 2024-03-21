@@ -85,7 +85,7 @@ private:
     void UpdateDxDy();
     void Advance();
     void NodeVorticity();
-    void InteriorVorticity(int startX, int endX, int startY, int endY);
-    void TimeAdvanceVorticity(int startX, int endX, int startY, int endY);
+    void InteriorVorticity(int startX, int endX, int startY, int endY, int threadid, int nthreads);
+    void TimeAdvanceVorticity(int startX, int endX, int startY, int endY, int threadid, int nthreads);
 };
 

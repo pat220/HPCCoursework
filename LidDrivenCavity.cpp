@@ -285,18 +285,29 @@ void LidDrivenCavity::Advance()
     // Boundary node vorticity
     // Cheking if the process is a corner and take that into account for the starting and end points
     // First checking "insider" ranks within the border of the grid
-    NodeVorticity(); // change vnew
+    int nthreads, threadid;
+    #pragma omp parallel default(shared) private(threadid)
+    {
+        threadid = omp_get_thread_num();
+        if(threadid==0) {
+            nthreads = omp_get_num_threads();
+        }
 
-    // Start and ending points for the interior vorticity so that it goes from 1 to < Nx/Ny - 1
-    int start_x = mpiGridCommunicator->start_x;
-    int end_x = mpiGridCommunicator->end_x;
-    int start_y = mpiGridCommunicator->start_y;
-    int end_y = mpiGridCommunicator->end_y;
+        NodeVorticity(); // change vnew
 
-    InteriorVorticity(start_x, end_x, start_y, end_y); // change vnew
+        // Start and ending points for the interior vorticity so that it goes from 1 to < Nx/Ny - 1
+        int start_x = mpiGridCommunicator->start_x;
+        int end_x = mpiGridCommunicator->end_x;
+        int start_y = mpiGridCommunicator->start_y;
+        int end_y = mpiGridCommunicator->end_y;
 
-    MPI_Barrier(mpiGridCommunicator->cart_comm);
-    TimeAdvanceVorticity(start_x, end_x, start_y, end_y); // change v with vnew
+        InteriorVorticity(start_x, end_x, start_y, end_y, threadid, nthreads); // change vnew
+        #pragma omp barrier
+
+        MPI_Barrier(mpiGridCommunicator->cart_comm);
+        TimeAdvanceVorticity(start_x, end_x, start_y, end_y, threadid, nthreads); // change v with vnew
+        #pragma omp barrier
+    }
 
     cg->Solve(v, s);
 }
@@ -439,15 +450,15 @@ void LidDrivenCavity::NodeVorticity()
 
 }
 
-void LidDrivenCavity::InteriorVorticity(int startX, int endX, int startY, int endY)
+void LidDrivenCavity::InteriorVorticity(int startX, int endX, int startY, int endY, int threadid, int nthreads)
 {
     // Send and receive the edges of the local domain
     mpiGridCommunicator->SendReceiveEdges(s, receiveBufferTopS, receiveBufferBottomS, receiveBufferLeftS, receiveBufferRightS); // Initialised this with S not to store more data
 
+    #pragma omp barrier
     // Update the vorticity values using the received data
-    // #pragma omp parallel for collapse(2)    
-    for (int i = startX; i < endX; ++i) {
-        for (int j = startY; j < endY; ++j) {
+    for (int j = startY+threadid; j < endY; j += nthreads) {
+        for (int i = startX; i < endX; ++i) {
             double leftNeighborValue = (coords[1] > 0 && i == 0) ? receiveBufferLeftS[j] : s[IDX(i - 1, j)];
             double rightNeighborValue = (coords[1] < p - 1 && i == Nx_local-1) ? receiveBufferRightS[j] : s[IDX(i + 1, j)];
             double botomNeighborValue = (coords[0] < p - 1 && j == 0) ? receiveBufferBottomS[i] : s[IDX(i, j - 1)];
@@ -459,24 +470,17 @@ void LidDrivenCavity::InteriorVorticity(int startX, int endX, int startY, int en
     }
 }
 
-void LidDrivenCavity::TimeAdvanceVorticity(int startX, int endX, int startY, int endY)
+void LidDrivenCavity::TimeAdvanceVorticity(int startX, int endX, int startY, int endY, int threadid, int nthreads)
 {   
     
     // Send and receive the edges of the local domain
     mpiGridCommunicator->SendReceiveEdges(vnew, receiveBufferTopV, receiveBufferBottomV, receiveBufferLeftV, receiveBufferRightV);
     mpiGridCommunicator->SendReceiveEdges(s, receiveBufferTopS, receiveBufferBottomS, receiveBufferLeftS, receiveBufferRightS);
 
+    #pragma omp barrier
     // Update the vorticity values using the received data
-    // #pragma omp parallel
-    // {   
-    // int id = omp_get_thread_num();
-    // int nthreads = omp_get_num_threads();
-
-    //#pragma omp parallel for collapse(2)  
-    for (int i = startX; i < endX; i++)
-    {
-        for (int j = startY; j < endY; j++)
-        {
+    for (int j = startY+threadid; j < endY; j += nthreads) {
+        for (int i = startX; i < endX; ++i) {
             double leftNeighborValueS = (coords[1] > 0 && i == 0) ? receiveBufferLeftS[j] : s[IDX(i - 1, j)];
             double rightNeighborValueS = (coords[1] < p - 1 && i == Nx_local-1) ? receiveBufferRightS[j] : s[IDX(i + 1, j)];
             double botomNeighborValueS = (coords[0] < p - 1 && j == 0) ? receiveBufferBottomS[i] : s[IDX(i, j - 1)];
@@ -495,6 +499,5 @@ void LidDrivenCavity::TimeAdvanceVorticity(int startX, int endX, int startY, int
             + nu * (rightNeighborValueV - 2.0 * vnew[IDX(i,j)] + leftNeighborValueV)*dx2i
             + nu * (botomNeighborValueV - 2.0 * vnew[IDX(i,j)] + topNeighborValueV)*dy2i);
         }
-    // }
     }
 }

@@ -32,6 +32,10 @@ void MPIGridCommunicator::SendReceiveEdges(const double* varArray, double* recei
     MPI_Cart_shift(cart_comm, 1, 1, &leftRank, &rightRank);
     MPI_Request request;
 
+    if (topRank == MPI_PROC_NULL && bottomRank == MPI_PROC_NULL && leftRank == MPI_PROC_NULL && rightRank == MPI_PROC_NULL) {
+        return; // case for only 1 process
+    }
+
     if (bottomRank != MPI_PROC_NULL) {
         // Send data to bottom members
         for (int i = 0; i < Nx_local; ++i) {
@@ -83,6 +87,8 @@ void MPIGridCommunicator::SendReceiveEdges(const double* varArray, double* recei
         MPI_Irecv(receiveBufferRight, Ny_local, MPI_DOUBLE, rightRank, 0, cart_comm, &request);
     }
     MPI_Wait(&request, MPI_STATUS_IGNORE);
+
+    return;
 }
 
 

@@ -60,6 +60,7 @@ SolverCG::~SolverCG()
 /// @param x Solution to the equation (stream function)
 void SolverCG::Solve(double* b, double* x) {
 
+    // Initialise variables
     unsigned int n = Nx_local*Ny_local;
     int g;
     double alpha, alpha_global;
@@ -67,7 +68,7 @@ void SolverCG::Solve(double* b, double* x) {
     double eps;
     double tol = 0.001;
 
-    // Reduce SUM to compute global dot of b and x and sqrt them
+    // Obtain norm of b by doing dot product locally, then summing globally and taking square root
     double dot_local = cblas_ddot(n, b, 1, b, 1);
     double dot_global;
     MPI_Allreduce(&dot_local, &dot_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
@@ -88,6 +89,7 @@ void SolverCG::Solve(double* b, double* x) {
     Precondition(r, z); // parallelised inside
     cblas_dcopy(n, z, 1, k, 1);        // k_0 = r_0
 
+    // Start the CG loop parallelised with OpenMP
     int nthreads, threadid;
     bool shouldBreak = false;
     #pragma omp parallel default(shared) private(threadid, g)
@@ -107,18 +109,18 @@ void SolverCG::Solve(double* b, double* x) {
 
             if(threadid == 0) {
                 alpha = cblas_ddot(n, t, 1, k, 1);  // alpha = p_k^T A p_k
-                MPI_Allreduce(&alpha, &alpha_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+                MPI_Allreduce(&alpha, &alpha_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm); // sum globally
 
                 alpha = cblas_ddot(n, r, 1, z, 1) / alpha_global; // compute alpha_k
-                MPI_Allreduce(&alpha, &alpha_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+                MPI_Allreduce(&alpha, &alpha_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm); // sum globally
 
                 beta = cblas_ddot(n, r, 1, z, 1);  // z_k^T r_k
-                MPI_Allreduce(&beta, &beta_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+                MPI_Allreduce(&beta, &beta_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm); // sum globally
 
                 cblas_daxpy(n, alpha_global, k, 1, x, 1);  // x_{k+1} = x_k + alpha_k p_k
                 cblas_daxpy(n, -alpha_global, t, 1, r, 1); // r_{k+1} = r_k - alpha_k A p_k
 
-                // Compute local to global 2norm with dot products
+                // Compute local to global norm with dot products as earlier
                 dot_local = cblas_ddot(n, r, 1, r, 1);
                 MPI_Allreduce(&dot_local, &dot_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
                 eps = sqrt(dot_global);
@@ -129,7 +131,7 @@ void SolverCG::Solve(double* b, double* x) {
                 Precondition(r, z);
 
                 beta = cblas_ddot(n, r, 1, z, 1) / beta_global;
-                MPI_Allreduce(&beta, &beta_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
+                MPI_Allreduce(&beta, &beta_global, 1, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm); // sum globally
                 // cout << rank << " beta2 is: in g = " << beta << endl;
 
                 cblas_dcopy(n, z, 1, t, 1);
@@ -155,6 +157,7 @@ void SolverCG::Solve(double* b, double* x) {
 /// @param threadid Thread ID
 /// @param nthreads Number of threads
 void SolverCG::ApplyOperator(double* in, double* out, int threadid, int nthreads) {
+
     // Obtain start and end points to yield results from 1 to < Nx/Ny -1
     int start_x = mpiGridCommunicator->start_x;
     int end_x = mpiGridCommunicator->end_x;
@@ -170,7 +173,6 @@ void SolverCG::ApplyOperator(double* in, double* out, int threadid, int nthreads
     
     #pragma omp barrier
 
-    // Assume ordered with y-direction fastest (column-by-column)
     double dx2i = 1.0/dx/dx;
     double dy2i = 1.0/dy/dy;
     for (int j = start_y+threadid; j < end_y; j += nthreads) {
@@ -186,8 +188,6 @@ void SolverCG::ApplyOperator(double* in, double* out, int threadid, int nthreads
                           + ( -     topNeighborValueV
                               + 2.0*in[IDX(i,   j)]
                               -     botomNeighborValueV)*dy2i;
-
-            // cout << rank << " has out[" << i << "][" << j << "] = " << out[IDX(i,j)] << endl;
         }
     }
 }
@@ -197,18 +197,20 @@ void SolverCG::ApplyOperator(double* in, double* out, int threadid, int nthreads
 /// @param out Output vector
 /// @brief Apply a factor to the inner points
 void SolverCG::Precondition(double* in, double* out) {
-    int i, j;
+
     double dx2i = 1.0/dx/dx;
     double dy2i = 1.0/dy/dy;
     double factor = 1.0/2.0/(dx2i + dy2i);
 
+    // Obtain start and end points to yield results from 1 to < Nx/Ny -1
     int start_x = mpiGridCommunicator->start_x;
     int end_x = mpiGridCommunicator->end_x;
     int start_y = mpiGridCommunicator->start_y;
     int end_y = mpiGridCommunicator->end_y;
 
-    for (j = start_y; j < end_y; ++j) {
-        for (i = start_x; i < end_x; ++i) {
+    // Inner points
+    for (int j = start_y; j < end_y; ++j) {
+        for (int i = start_x; i < end_x; ++i) {
             out[IDX(i,j)] = in[IDX(i,j)]*factor;
         }
     }
@@ -270,8 +272,8 @@ void SolverCG::CleanUpBuffers()
 /// @brief Impose the boundary conditions
 /// @param inout Input and output vector. The boundary conditions are imposed on this vector
 void SolverCG::ImposeBC(double* inout) {
+    
     // Boundaries
-
     if (coords[0] == 0) // top
     {
         for (int i = 0; i < Nx_local; ++i) {

@@ -62,7 +62,7 @@ int main(int argc, char **argv)
 
     if (sqrt(size) != floor(sqrt(size)) || size > 16) {
         if (rank == 0) {
-            cout << "The number of processes must be a perfect square and less than 16" << endl;
+            cout << "The number of processes must be a perfect square and less or equal to 16" << endl;
         }
         MPI_Finalize();
         return 1;

@@ -237,5 +237,10 @@ BOOST_AUTO_TEST_CASE(SolverCG_file_comparison) {
     // Finalise MPI within the struct
     delete cgCG;
     delete mpiGridCommunicatorCG;
+
+    delete [] v;
+    delete [] s;
+    delete [] outputArray_s;
+    delete [] global_s;
     
 }

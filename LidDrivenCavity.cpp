@@ -198,9 +198,6 @@ void LidDrivenCavity::WriteSolution(std::string file)
     MPI_Allreduce(outputArray_v, global_v, Npts, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
     MPI_Allreduce(outputArray_s, global_s, Npts, MPI_DOUBLE, MPI_SUM, mpiGridCommunicator->cart_comm);
     MPI_Barrier(mpiGridCommunicator->cart_comm);
-    
-    double* u1new = new double[Nx_local * Ny_local]();
-    cblas_dcopy(Nx_local * Ny_local, u1, 1, u1new, 1);
 
 
     if (rank == 0){
@@ -264,6 +261,7 @@ void LidDrivenCavity::CleanUp()
         delete[] s;
         delete[] tmp;
         delete cg;
+        delete mpiGridCommunicator;
     }
 }
 

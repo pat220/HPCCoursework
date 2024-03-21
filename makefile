@@ -36,7 +36,7 @@ doc:
 
 .PHONY: clean	
 clean:	
-	-rm -f *.o $(TARGET) $(TARGET_TESTS_SCG)
+	-rm -f *.o $(TARGET) $(TARGET_TESTS_SCG) $(TARGET_PROFILER) $(TARGET_TESTS_LDC) $(TARGET_DOXY) *.out
 	
 .PHONY: docs
 docs:

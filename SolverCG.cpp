@@ -85,6 +85,7 @@ void SolverCG::Solve(double* b, double* x) {
         do {
             g++;
             // Perform action of Nabla^2 * p
+            #pragma omp barrier
             ApplyOperator(k, t, threadid, nthreads); // parallelised inside
             #pragma omp barrier
             if(threadid == 0) {

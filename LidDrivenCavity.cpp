@@ -17,15 +17,28 @@ using namespace std;
 #include "mpi.h"
 #include <omp.h>
 
+/// @class LidDrivenCavity
+/// @brief  Class for the lid-driven cavity problem
+/// @note   The class solves the lid-driven cavity problem using the vorticity-stream function formulation and the conjugate gradient solver in class SolverCG
+
+
+/// @brief  Constructor
+/// @note   Initialises the class
 LidDrivenCavity::LidDrivenCavity()
 {
 }
 
+/// @brief  Destructor
+/// @note   Cleans up the class by calling the CleanUp function
 LidDrivenCavity::~LidDrivenCavity()
 {
     CleanUp();
 }
 
+/// @brief  Set the domain size
+/// @param  xlen    Length of the domain in the x-direction
+/// @param  ylen    Length of the domain in the y-direction
+/// @note   This function sets the domain size and updates the dx and dy values calling the UpdateDxDy function
 void LidDrivenCavity::SetDomainSize(double xlen, double ylen)
 {
     this->Lx = xlen;
@@ -33,28 +46,42 @@ void LidDrivenCavity::SetDomainSize(double xlen, double ylen)
     UpdateDxDy();
 }
 
+/// @brief  Set the grid size
+/// @param  nx  Number of grid points in the x-direction
+/// @param  ny  Number of grid points in the y-direction
 void LidDrivenCavity::SetGridSize(int nx, int ny)
 {
     this->Nx = nx;
     this->Ny = ny;
 }
 
+/// @brief  Set the time step size
+/// @param  deltat  Time step size
 void LidDrivenCavity::SetTimeStep(double deltat)
 {
     this->dt = deltat;
 }
 
+/// @brief  Set the final time
+/// @param  finalt  Final time
 void LidDrivenCavity::SetFinalTime(double finalt)
 {
     this->T = finalt;
 }
 
+/// @brief  Set the Reynolds number and setting the inverse of it to multiply it in some amthematical expresssions instead of dividing it for faster computation
+/// @param  re  Reynolds number
 void LidDrivenCavity::SetReynoldsNumber(double re)
 {
     this->Re = re;
     this->nu = 1.0 / re;
 }
 
+/// @brief  Set the local variables for each process. Sets the subgrid size of each rank based on their coordinates in the cartesian grid and how big the grid pxp is
+/// @param  Nx      Number of grid points in the x-direction
+/// @param  Ny      Number of grid points in the y-direction
+/// @param  p       Square root of number of processes (pxp grid)
+/// @param  coords  Coordinates of the current process in the cartesian grid
 void LidDrivenCavity::SetLocalVariables(int Nx, int Ny, int p, int* coords)
 {
     // Calculate starting and ending points of each process
@@ -96,6 +123,10 @@ void LidDrivenCavity::SetLocalVariables(int Nx, int Ny, int p, int* coords)
     UpdateDxDy();
 }
 
+/// @brief  Initialise the MPI grid communicator and the conjugate gradient solver. Also initialise the local arrays for each process (v, vnew, s, tmp), the buffers for the communication and the start and end points of each subgrid so that in the global grid the mathematical expressions go from 1 to < Nx/Ny - 1
+/// @param  comm    MPI communicator
+/// @param  coords  Coordinates of the current process in the cartesian grid
+/// @param  p       Square root of number of processes (pxp grid)
 void LidDrivenCavity::Initialise(MPI_Comm comm, int *coords, int p)
 {
     CleanUp();
@@ -120,6 +151,8 @@ void LidDrivenCavity::Initialise(MPI_Comm comm, int *coords, int p)
     
 }
 
+/// @brief  Integrate the vorticity field by advancing it in time as many times as NSteps
+/// @note   SolverCG is called to solve for the stream function inside
 void LidDrivenCavity::Integrate()
 {
     int NSteps = ceil(T / dt);
@@ -132,6 +165,10 @@ void LidDrivenCavity::Integrate()
     }
 }
 
+/// @brief  Write the solution to a file
+/// @param  file    File name
+/// @note   The solution is written to a file with the format: x y v s u0 u1, where x and y are the coordinates, v is the vorticity, s is the stream function, u0 is the x-component of the velocity and u1 is the y-component of the velocity
+///         u0 and u1 are computed here. The file is written by the rank 0 process
 void LidDrivenCavity::WriteSolution(std::string file)
 {   
     int rank;
@@ -233,6 +270,8 @@ void LidDrivenCavity::WriteSolution(std::string file)
 
 }
 
+/// @brief  Print the configuration of the simulation
+/// @note   Checks if the time-step restriction is satisfied and prints the configuration of the simulation
 void LidDrivenCavity::PrintConfiguration()
 {
     cout << "Grid size: " << Nx << " x " << Ny << endl;
@@ -247,11 +286,12 @@ void LidDrivenCavity::PrintConfiguration()
     if (nu * dt / dx / dy > 0.25)
     {
         cout << "ERROR: Time-step restriction not satisfied!" << endl;
-        cout << "Maximum time-step is " << 0.25 * dx * dy / nu << endl;
+        cout << "Maximum time-step is " << 0.25 * dx * dy * Re << endl; // 0.25 * dx * dy / nu
         exit(-1);
     }
 }
 
+/// @brief  Clean up the class by deleting the arrays and the objects
 void LidDrivenCavity::CleanUp()
 {
     if (v)
@@ -265,6 +305,7 @@ void LidDrivenCavity::CleanUp()
     }
 }
 
+/// @brief  Update the dx and dy values. Also update the total number of points in the local grid and global grid
 void LidDrivenCavity::UpdateDxDy()
 {
     dx = Lx / (Nx - 1);
@@ -273,6 +314,8 @@ void LidDrivenCavity::UpdateDxDy()
     Npts = Nx * Ny;
 }
 
+/// @brief  Calculates the vorticity at the boundary nodes, at the interior nodes and advance the vorticity in time. It also solves for the stream function using the conjugate gradient solver in SolveCG
+/// @note   The vorticity at the boundary nodes is calculated first, then the vorticity at the interior nodes is calculated and advanced in time
 void LidDrivenCavity::Advance()
 {
     this->dxi = 1.0 / dx;
@@ -311,6 +354,7 @@ void LidDrivenCavity::Advance()
     cg->Solve(v, s);
 }
 
+/// @brief  Initialise the buffers for the communication
 void LidDrivenCavity::InitialiseBuffers()
 {
     CleanUpBuffers();
@@ -327,6 +371,7 @@ void LidDrivenCavity::InitialiseBuffers()
 
 }
 
+/// @brief  Clean up the buffers for the communication
 void LidDrivenCavity::CleanUpBuffers()
 {
     if (receiveBufferTopS)
@@ -343,6 +388,9 @@ void LidDrivenCavity::CleanUpBuffers()
     }
 }
 
+/// @brief  Calculate the vorticity at the boundary nodes with its corresponding mathematical expression
+/// @param  threadid    Thread id
+/// @param  nthreads    Number of threads
 void LidDrivenCavity::NodeVorticity( int threadid, int nthreads)
 {   
     // int rank;
@@ -457,6 +505,11 @@ void LidDrivenCavity::NodeVorticity( int threadid, int nthreads)
 
 }
 
+/// @brief  Calculate the vorticity at the interior nodes with its corresponding mathematical expression
+/// @param  startX  Starting x-coordinate (1 or 0 depending on the rank to ensure globally the mathematical expression goes from 1 to < Nx/Ny - 1)
+/// @param  endX    Ending x-coordinate (Nx_local - 1 or Nx_local depending on the rank to ensure globally the mathematical expression goes from 1 to < Nx/Ny - 1)
+/// @param  startY  Starting y-coordinate (1 or 0 depending on the rank to ensure globally the mathematical expression goes from 1 to < Nx/Ny - 1)
+/// @param  endY    Ending y-coordinate (Ny_local - 1 or Ny_local depending on the rank to ensure globally the mathematical expression goes from 1 to < Nx/Ny - 1)
 void LidDrivenCavity::InteriorVorticity(int startX, int endX, int startY, int endY, int threadid, int nthreads)
 {
     // Send and receive the edges of the local domain
@@ -477,6 +530,11 @@ void LidDrivenCavity::InteriorVorticity(int startX, int endX, int startY, int en
     }
 }
 
+/// @brief  Advance the vorticity in time
+/// @param  startX  Starting x-coordinate (1 or 0 depending on the rank to ensure globally the mathematical expression goes from 1 to < Nx/Ny - 1)
+/// @param  endX    Ending x-coordinate (Nx_local - 1 or Nx_local depending on the rank to ensure globally the mathematical expression goes from 1 to < Nx/Ny - 1)
+/// @param  startY  Starting y-coordinate (1 or 0 depending on the rank to ensure globally the mathematical expression goes from 1 to < Nx/Ny - 1)
+/// @param  endY    Ending y-coordinate (Ny_local - 1 or Ny_local depending on the rank to ensure globally the mathematical expression goes from 1 to < Nx/Ny - 1)
 void LidDrivenCavity::TimeAdvanceVorticity(int startX, int endX, int startY, int endY, int threadid, int nthreads)
 {   
     

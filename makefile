@@ -9,6 +9,7 @@ LDLIBS = -lblas -lboost_program_options -lboost_unit_test_framework #-lboost_chr
 TARGET = solver
 TARGET_TESTS_SCG = unittest_scg
 TARGET_TESTS_LDC = unittest_ldc
+TARGET_PROFILER = solver_profiler # it has special flags inside
 TARGET_DOXY = doxygen_file
 
 default: $(TARGET)
@@ -23,6 +24,10 @@ $(TARGET_TESTS_SCG): $(OBJS_TESTS_SCG) $(OBJS)
 	$(CXX) -o $@ $^ $(LDLIBS)
 
 $(TARGET_TESTS_LDC): $(OBJS_TESTS_LDC) $(OBJS)
+	$(CXX) -o $@ $^ $(LDLIBS)
+
+$(TARGET_PROFILER): $(OBJS_MAIN) $(OBJS)
+	export OMPI_CXX=g++-10
 	$(CXX) -o $@ $^ $(LDLIBS)
 
 doc:

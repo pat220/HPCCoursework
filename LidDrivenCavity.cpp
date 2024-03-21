@@ -147,9 +147,9 @@ void LidDrivenCavity::WriteSolution(std::string file)
 
     mpiGridCommunicator->SendReceiveEdges(s, receiveBufferTopS, receiveBufferBottomS, receiveBufferLeftS, receiveBufferRightS); // Initialised this with S not to store more data
 
-    for (int i = start_x; i < end_x; ++i)
+    for (int j = start_y; j < end_y; ++j)
     {
-        for (int j = start_y; j < end_y; ++j)
+        for (int i = start_x; i < end_x; ++i)
         {   
             double rightNeighborValue = (coords[1] < p - 1 && i == Nx_local-1) ? receiveBufferRightS[j] : s[IDX(i + 1, j)];
             double topNeighborValue = (coords[0] > 0 && j == Ny_local-1) ? receiveBufferTopS[i] : s[IDX(i, j + 1)];
@@ -293,7 +293,8 @@ void LidDrivenCavity::Advance()
             nthreads = omp_get_num_threads();
         }
 
-        NodeVorticity(); // change vnew
+        NodeVorticity(threadid, nthreads);
+        #pragma omp barrier
 
         // Start and ending points for the interior vorticity so that it goes from 1 to < Nx/Ny - 1
         int start_x = mpiGridCommunicator->start_x;
@@ -304,9 +305,9 @@ void LidDrivenCavity::Advance()
         InteriorVorticity(start_x, end_x, start_y, end_y, threadid, nthreads); // change vnew
         #pragma omp barrier
 
-        MPI_Barrier(mpiGridCommunicator->cart_comm);
         TimeAdvanceVorticity(start_x, end_x, start_y, end_y, threadid, nthreads); // change v with vnew
         #pragma omp barrier
+
     }
 
     cg->Solve(v, s);
@@ -344,7 +345,7 @@ void LidDrivenCavity::CleanUpBuffers()
     }
 }
 
-void LidDrivenCavity::NodeVorticity()
+void LidDrivenCavity::NodeVorticity( int threadid, int nthreads)
 {   
     // int rank;
     // MPI_Comm_rank(mpiGridCommunicator->cart_comm, &rank);
@@ -352,101 +353,109 @@ void LidDrivenCavity::NodeVorticity()
     // cout << "Process " << rank << " coordinates: (" << coords[0] << ", " << coords[1] << ")" << endl;
     // Corners first
 
+    #pragma omp barrier
     if (coords[0] == 0 && coords[1] == 0)
     {
         
-        for (int i = 1; i < Nx_local; ++i)
+        for (int i = 1+threadid; i < Nx_local; i += nthreads)
         {
             // top
             vnew[IDX(i, Ny_local - 1)] = 2.0 * dy2i * (s[IDX(i, Ny_local - 1)] - s[IDX(i, Ny_local - 2)]) - 2.0 * dyi * U;
         }
 
-        for (int j = 0; j < Ny_local-1; ++j)
+        for (int j = 0+threadid; j < Ny_local-1; j += nthreads)
         {
             // left
             vnew[IDX(0, j)] = 2.0 * dx2i * (s[IDX(0, j)] - s[IDX(1, j)]);
         }
     }
+    #pragma omp barrier
     
     if (coords[0] == 0 && coords[1] == p - 1)
     {
-        for (int i = 0; i < Nx_local-1; ++i)
+        for (int i = 0+threadid; i < Nx_local-1; i += nthreads)
         {
             // top
             vnew[IDX(i, Ny_local - 1)] = 2.0 * dy2i * (s[IDX(i, Ny_local - 1)] - s[IDX(i, Ny_local - 2)]) - 2.0 * dyi * U;
         }
-        for (int j = 0; j < Ny_local-1; ++j)
+        for (int j = 0+threadid; j < Ny_local-1; j += nthreads)
         {
             // right
             vnew[IDX(Nx_local - 1, j)] = 2.0 * dx2i * (s[IDX(Nx_local - 1, j)] - s[IDX(Nx_local - 2, j)]);
         }
     }
+    #pragma omp barrier
     
     if (coords[0] == p - 1 && coords[1] == 0)
     {
-        for (int i = 1; i < Nx_local; ++i)
+        for (int i = 1+threadid; i < Nx_local; i += nthreads)
         {
             // bottom
             vnew[IDX(i, 0)] = 2.0 * dy2i * (s[IDX(i, 0)] - s[IDX(i, 1)]);
         }
-        for (int j = 1; j < Ny_local; ++j)
+        for (int j = 1+threadid; j < Ny_local; j += nthreads)
         {
             // left
             vnew[IDX(0, j)] = 2.0 * dx2i * (s[IDX(0, j)] - s[IDX(1, j)]);
         }
     }
+    #pragma omp barrier
     
     if (coords[0] == p - 1 && coords[1] == p - 1)
     {
-        for (int i = 0; i < Nx_local-1; ++i)
+        for (int i = 0; i < Nx_local-1; i += nthreads)
         {
             // bottom
             vnew[IDX(i, 0)] = 2.0 * dy2i * (s[IDX(i, 0)] - s[IDX(i, 1)]);
         }
-        for (int j = 1; j < Ny_local; ++j)
+        for (int j = 1+threadid; j < Ny_local; j += nthreads)
         {
             // right
             vnew[IDX(Nx_local - 1, j)] = 2.0 * dx2i * (s[IDX(Nx_local - 1, j)] - s[IDX(Nx_local - 2, j)]);
         }
     }
+    #pragma omp barrier
 
     // Edges
     if (coords[0] == 0 && !(coords[1] == 0 || coords[1] == p - 1))
     {
-        for (int i = 0; i < Nx_local; ++i)
+        for (int i = 0+threadid; i < Nx_local; i += nthreads)
         {
             // top
             vnew[IDX(i, Ny_local - 1)] = 2.0 * dy2i * (s[IDX(i, Ny_local - 1)] - s[IDX(i, Ny_local - 2)]) - 2.0 * dyi * U;
         }
     }
+    #pragma omp barrier
     
     if (coords[0] == p - 1 && !(coords[1] == 0 || coords[1] == p - 1))
     {
-        for (int i = 0; i < Nx_local; ++i)
+        for (int i = 0+threadid; i < Nx_local; i += nthreads)
         {
             // bottom
             vnew[IDX(i, 0)] = 2.0 * dy2i * (s[IDX(i, 0)] - s[IDX(i, 1)]);
         }
     }
+    #pragma omp barrier
     
     if (coords[1] == 0 && !(coords[0] == 0 || coords[0] == p - 1))
     {
-        for (int j = 0; j < Ny_local; ++j)
+        for (int j = 0+threadid; j < Ny_local; j += nthreads)
         {
             // left
             vnew[IDX(0, j)] = 2.0 * dx2i * (s[IDX(0, j)] - s[IDX(1, j)]);
         }
     }
+    #pragma omp barrier
     
     if (coords[1] == p - 1 && !(coords[0] == 0 || coords[0] == p - 1))
     {
-        for (int j = 0; j < Ny_local; ++j)
+        for (int j = 0+threadid; j < Ny_local; j += nthreads)
         {
             // right
             vnew[IDX(Nx_local - 1, j)] = 2.0 * dx2i * (s[IDX(Nx_local - 1, j)] - s[IDX(Nx_local - 2, j)]);
         }
     }
-
+    #pragma omp barrier
 
 }
 

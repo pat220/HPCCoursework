@@ -84,7 +84,7 @@ private:
     void InitialiseBuffers();
     void UpdateDxDy();
     void Advance();
-    void NodeVorticity();
+    void NodeVorticity(int threadid, int nthreads);
     void InteriorVorticity(int startX, int endX, int startY, int endY, int threadid, int nthreads);
     void TimeAdvanceVorticity(int startX, int endX, int startY, int endY, int threadid, int nthreads);
 };

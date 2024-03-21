@@ -140,7 +140,6 @@ void SolverCG::Solve(double* b, double* x) {
             }
             #pragma omp barrier
             if(shouldBreak){ break; }
-            cout << g << endl;
         } while (g < 5000); // Set a maximum number of iterations
 
         if (threadid == 0 && g == 5000) {

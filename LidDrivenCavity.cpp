@@ -162,9 +162,9 @@ void LidDrivenCavity::Integrate()
     // Integrate the vorticity field in time
     for (int t = 0; t < NSteps; ++t)
     {
-        // std::cout << "Step: " << setw(8) << t
-        //           << "  Time: " << setw(8) << t * dt
-        //           << std::endl;
+        std::cout << "Step: " << setw(8) << t
+                  << "  Time: " << setw(8) << t * dt
+                  << std::endl;
         Advance();
     }
 }

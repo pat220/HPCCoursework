@@ -13,9 +13,6 @@ TARGET_TESTS = unittests
 TARGET_PROFILER = solver_profiler # it has special flags inside
 TARGET_DOXY = doxygen_file
 
-# Target for displaying the help message to run unit tests separately
-$(TARGET_TESTS): $(TARGET_TESTS_SCG) $(TARGET_TESTS_LDC)
-	@echo "WARNING FROM DESIGNER: Making the unittests on the same file does not work. Try executing them separately with -./unittest_scg- and -./unittest_ldc-"
 
 default: $(TARGET)
 
@@ -24,6 +21,10 @@ default: $(TARGET)
 	
 $(TARGET): $(OBJS_MAIN) $(OBJS)
 	$(CXX) -o $@ $^ $(LDLIBS)
+
+# Target for displaying the help message to run unit tests separately
+$(TARGET_TESTS): $(TARGET_TESTS_SCG) $(TARGET_TESTS_LDC)
+	@echo "WARNING FROM DESIGNER: Making the unittests on the same file does not work. Try executing them separately with -./unittest_scg- and -./unittest_ldc-"
 
 $(TARGET_TESTS_SCG): $(OBJS_TESTS_SCG) $(OBJS) 
 	$(CXX) -o $@ $^ $(LDLIBS)

@@ -9,15 +9,20 @@ LDLIBS = -lblas -lboost_program_options -lboost_unit_test_framework #-lboost_chr
 TARGET = solver
 TARGET_TESTS_SCG = unittest_scg # tried to get unitests as a target with both unit tests but when doing that 1 test fails whilst separately they do not - to do with MPI
 TARGET_TESTS_LDC = unittest_ldc # tried to get unitests as a target with both unit tests but when doing that 1 test fails whilst separately they do not - to do with MPI
+TARGET_TESTS = unittests
 TARGET_PROFILER = solver_profiler # it has special flags inside
 TARGET_DOXY = doxygen_file
+
+# Target for displaying the help message to run unit tests separately
+$(TARGET_TESTS): $(TARGET_TESTS_SCG) $(TARGET_TESTS_LDC)
+	@echo "WARNING FROM DESIGNER: Making the unittests on the same file does not work. Try executing them separately with -./unittest_scg- and -./unittest_ldc-"
 
 default: $(TARGET)
 
 %.o : %.cpp $(HDRS)
 	$(CXX) $(CXXFLAGS) -g -o $@ -c $<
 	
-$(TARGET): $(OBJS_MAIN) $(OBJS) 
+$(TARGET): $(OBJS_MAIN) $(OBJS)
 	$(CXX) -o $@ $^ $(LDLIBS)
 
 $(TARGET_TESTS_SCG): $(OBJS_TESTS_SCG) $(OBJS) 

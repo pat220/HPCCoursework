@@ -12,6 +12,9 @@ public:
 private:
     double dx;
     double dy;
+    double dx2i;
+    double dy2i;
+    double factor;
     int Nx;
     int Ny;
     int Nx_local;

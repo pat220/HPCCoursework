@@ -31,6 +31,11 @@ SolverCG::SolverCG(int pNx, int pNy, double pdx, double pdy, MPIGridCommunicator
 {
     dx = pdx;
     dy = pdy;
+
+    dx2i = 1.0/dx/dx;
+    dy2i = 1.0/dy/dy;
+    factor = 1.0/2.0/(dx2i + dy2i);
+
     Nx = pNx;
     Ny = pNy;
     Nx_local = mpiGridCommunicator->Nx_local;
@@ -197,10 +202,6 @@ void SolverCG::ApplyOperator(double* in, double* out, int threadid, int nthreads
 /// @param out Output vector
 /// @brief Apply a factor to the inner points
 void SolverCG::Precondition(double* in, double* out) {
-
-    double dx2i = 1.0/dx/dx;
-    double dy2i = 1.0/dy/dy;
-    double factor = 1.0/2.0/(dx2i + dy2i);
 
     // Obtain start and end points to yield results from 1 to < Nx/Ny -1
     int start_x = mpiGridCommunicator->start_x;

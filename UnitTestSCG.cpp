@@ -169,12 +169,7 @@ BOOST_AUTO_TEST_CASE(SolverCG_file_comparison) {
         Ny_local = y_last - y_first;
     }
 
-    int start_x = coords[1] == 0 ? 1 : 0;
-    int end_x = coords[1] == p - 1 ? Nx_local - 1 : Nx_local;
-    int start_y = coords[0] == p - 1 ? 1 : 0;
-    int end_y = coords[0] == 0 ? Ny_local - 1 : Ny_local;
-
-    MPIGridCommunicator* mpiGridCommunicatorCG = new MPIGridCommunicator(cart_comm, Nx_local, Ny_local, start_x, end_x, start_y, end_y, coords, p);
+    MPIGridCommunicator* mpiGridCommunicatorCG = new MPIGridCommunicator(cart_comm, Nx_local, Ny_local, coords, p);
     SolverCG* cgCG = new SolverCG(Nx_local, Ny_local, dx, dy, mpiGridCommunicatorCG);
 
     double* v   = new double[Nx_local*Ny_local]();
@@ -214,16 +209,12 @@ BOOST_AUTO_TEST_CASE(SolverCG_file_comparison) {
 
     // Write the solution to file
     // Gather the arrays into actual size
-
-    
-
     if (rank == 0){
         ofstream file;
         file.open("TestOutputSolverCG.txt");
         for (int j = 0; j < Ny; ++j) {
             for (int i = 0; i < Nx; ++i) {
                 file << global_s[IDX_GLOBAL(i,j)] << " ";
-                cout << global_s[IDX_GLOBAL(i,j)] << " ";
             }
             file << endl;
         }

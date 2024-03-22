@@ -131,15 +131,19 @@ void LidDrivenCavity::Initialise(MPI_Comm comm, int *coords, int p)
 {
     CleanUp();
     InitialiseBuffers();
+    this->NSteps = ceil(T / dt);
 
-    // Set up starting and end points not to include boundaries (0, Nx/Ny - 1)
-    int start_x = coords[1] == 0 ? 1 : 0;
-    int end_x = coords[1] == p - 1 ? Nx_local - 1 : Nx_local;
-    int start_y = coords[0] == p - 1 ? 1 : 0;
-    int end_y = coords[0] == 0 ? Ny_local - 1 : Ny_local;
     
     // Set up the MPI grid communicator and the conjugate gradient solver
-    mpiGridCommunicator = new MPIGridCommunicator(comm, Nx_local, Ny_local, start_x, end_x, start_y, end_y, coords, p);
+    mpiGridCommunicator = new MPIGridCommunicator(comm, Nx_local, Ny_local, coords, p);
+
+    // Set the start and ending points for the interior vorticity so that it goes from 1 to < Nx/Ny - 1 from mpiGridCommunicator
+    this->start_x = mpiGridCommunicator->start_x;
+    this->end_x = mpiGridCommunicator->end_x;
+    this->start_y = mpiGridCommunicator->start_y;
+    this->end_y = mpiGridCommunicator->end_y;
+
+
     cg = new SolverCG(Nx_local, Ny_local, dx, dy, mpiGridCommunicator);
     this->coords = coords;
     this->p = p;
@@ -155,8 +159,7 @@ void LidDrivenCavity::Initialise(MPI_Comm comm, int *coords, int p)
 /// @note   SolverCG is called to solve for the stream function inside
 void LidDrivenCavity::Integrate()
 {   
-    // Calculate the number of time steps and integrate the vorticity field
-    int NSteps = ceil(T / dt);
+    // Integrate the vorticity field in time
     for (int t = 0; t < NSteps; ++t)
     {
         // std::cout << "Step: " << setw(8) << t
@@ -182,8 +185,8 @@ void LidDrivenCavity::WriteSolution(std::string file)
     int end_y = mpiGridCommunicator->end_y;
 
     // Create the x-direction and y-direciton velocity arrays
-    double *u0 = new double[Nx_local * Ny_local]();
-    double *u1 = new double[Nx_local * Ny_local]();
+    double *u0 = new double[Npts_local]();
+    double *u1 = new double[Npts_local]();
 
     mpiGridCommunicator->SendReceiveEdges(s, receiveBufferTopS, receiveBufferBottomS, receiveBufferLeftS, receiveBufferRightS); // Initialised this with S not to store more data
 
@@ -313,38 +316,31 @@ void LidDrivenCavity::CleanUp()
     }
 }
 
-/// @brief  Update the dx and dy values. Also update the total number of points in the local grid and global grid
+/// @brief  Update the dx and dy values. Also update the total number of points in the local grid and global grid. It also calculates 1/dx, 1/dy, 1/dx^2 and 1/dy^2 for faster computation in the mathematical expressions
 void LidDrivenCavity::UpdateDxDy()
 {
     dx = Lx / (Nx - 1);
     dy = Ly / (Ny - 1);
     Npts_local = Nx_local * Ny_local;
     Npts = Nx * Ny;
+
+    this->dxi = 1.0 / dx;
+    this->dyi = 1.0 / dy;
+    this->dx2i = 1.0 / dx / dx;
+    this->dy2i = 1.0 / dy / dy;
 }
 
 /// @brief  Calculates the vorticity at the boundary nodes, at the interior nodes and advance the vorticity in time. It also solves for the stream function using the conjugate gradient solver in SolveCG
 /// @note   The vorticity at the boundary nodes is calculated first, then the vorticity at the interior nodes is calculated and advanced in time
 void LidDrivenCavity::Advance()
 {
-    this->dxi = 1.0 / dx;
-    this->dyi = 1.0 / dy;
-    this->dx2i = 1.0 / dx / dx;
-    this->dy2i = 1.0 / dy / dy;
-
     // Parallelising using OpenMP
     int nthreads, threadid;
-    int start_x, end_x, start_y, end_y;
     #pragma omp parallel default(shared) private(threadid)
     {
         threadid = omp_get_thread_num();
         if(threadid==0) {
             nthreads = omp_get_num_threads();
-
-            // Start and ending points for the interior vorticity so that it goes from 1 to < Nx/Ny - 1
-            start_x = mpiGridCommunicator->start_x;
-            end_x = mpiGridCommunicator->end_x;
-            start_y = mpiGridCommunicator->start_y;
-            end_y = mpiGridCommunicator->end_y;
         }
 
         NodeVorticity(start_x, end_x, start_y, end_y, threadid, nthreads);

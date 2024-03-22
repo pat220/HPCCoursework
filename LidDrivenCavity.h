@@ -34,6 +34,7 @@ private:
 
     double dt   = 0.01;
     double T    = 1.0;
+    int NSteps = ceil(T / dt);
     double dx;
     double dy;
     int    Nx   = 9;
@@ -59,6 +60,11 @@ private:
     int x_last;
     int y_first;
     int y_last;
+
+    int start_x;
+    int end_x;
+    int start_y;
+    int end_y;
 
     double dxi;
     double dyi;

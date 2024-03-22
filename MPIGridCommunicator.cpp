@@ -18,9 +18,15 @@ using namespace std;
 /// @param end_y Ending index in y direction for the rank (Nx_local - 1 or Nx_local depending on the rank to ensure globally the mathematical expression goes from 1 to < Nx/Ny - 1)
 /// @param coords Coordinates of the rank in the cartesian communicator
 /// @param p Grid size (pxp grid)
-MPIGridCommunicator::MPIGridCommunicator(MPI_Comm comm, int Nx_local, int Ny_local, int start_x, int end_x, int start_y, int end_y, int* coords, int p)
-    : cart_comm(comm), Nx_local(Nx_local), Ny_local(Ny_local), start_x(start_x), end_x(end_x), start_y(start_y), end_y(end_y), coords(coords), p(p)
+MPIGridCommunicator::MPIGridCommunicator(MPI_Comm comm, int Nx_local, int Ny_local, int* coords, int p)
+    : cart_comm(comm), Nx_local(Nx_local), Ny_local(Ny_local), coords(coords), p(p)
 {
+    // Set the start and end indices for the subgrid not to include 0 and Nx/Ny - 1 in global grid
+    this->start_x = coords[1] == 0 ? 1 : 0;
+    this->end_x = coords[1] == p - 1 ? Nx_local - 1 : Nx_local;
+    this->start_y = coords[0] == p - 1 ? 1 : 0;
+    this->end_y = coords[0] == 0 ? Ny_local - 1 : Ny_local;
+
     // Initialize the grid communicator
     this->sendBufferTop = new double[Nx_local];
     this->sendBufferBottom = new double[Nx_local];

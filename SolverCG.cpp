@@ -35,7 +35,7 @@ SolverCG::SolverCG(int pNx, int pNy, double pdx, double pdy, MPIGridCommunicator
     Ny = pNy;
     Nx_local = mpiGridCommunicator->Nx_local;
     Ny_local = mpiGridCommunicator->Ny_local;
-    int n = Nx*Ny;
+    int n = Nx_local*Ny_local;
 
     r = new double[n];
     k = new double[n];
@@ -127,6 +127,7 @@ void SolverCG::Solve(double* b, double* x) {
                 if (eps < tol * tol) {
                     shouldBreak = true;
                 }
+                
 
                 Precondition(r, z);
 

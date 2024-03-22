@@ -7,7 +7,7 @@
 class MPIGridCommunicator {
 public:
     // Constructor
-    MPIGridCommunicator(MPI_Comm comm, int Nx_local, int Ny_local, int start_x, int end_x, int start_y, int end_y, int* coords, int p);
+    MPIGridCommunicator(MPI_Comm comm, int Nx_local, int Ny_local, int* coords, int p);
     // Destructor
     ~MPIGridCommunicator();
     
@@ -19,10 +19,10 @@ public:
 
     const int Nx_local;
     const int Ny_local;
-    const int start_x;
-    const int end_x;
-    const int start_y;
-    const int end_y;
+    int start_x;
+    int end_x;
+    int start_y;
+    int end_y;
     const int* coords;
     const int p;
 

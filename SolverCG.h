@@ -1,5 +1,10 @@
 #pragma once
 
+/// @headerfile SolverCG.h
+/// @brief The SolverCG class solves a linear system of equations using the conjugate gradient method.
+/// @details SolverCG class has methods to solve the linear system of equations, apply the operator, precondition the system,
+/// impose boundary conditions, initialise buffers, and clean up buffers. It uses MPI for parallel computing and teh class MpiGridCommunicator for communication between ranks.
+
 class MPIGridCommunicator;
 class SolverCG
 {

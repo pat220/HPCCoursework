@@ -17,10 +17,10 @@ using namespace std;
 #include "mpi.h"
 #include <omp.h>
 
+/// @file LidDrivenCavity.cpp
 /// @class LidDrivenCavity
 /// @brief  Class for the lid-driven cavity problem
 /// @note   The class solves the lid-driven cavity problem using the vorticity-stream function formulation and the conjugate gradient solver in class SolverCG
-
 
 /// @brief  Constructor
 /// @note   Initialises the class

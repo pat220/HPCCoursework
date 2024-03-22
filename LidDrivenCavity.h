@@ -8,6 +8,13 @@ using namespace std;
 class SolverCG;
 class MPIGridCommunicator;
 
+/// @class LidDrivenCavity
+/// @headerfile LidDrivenCavity.h
+/// @details The class LidDrivenCavity solves the vorticity-stream function formulation of the incompressible Navier-Stokes equations in 2D using the finite difference method. The domain is a square cavity with a moving lid.
+/// The class uses the conjugate gradient method to solve the pressure Poisson equation. The class uses MPI for parallel computing and OMP for threads.
+/// The class has methods to set the domain size, grid size, time step, final time, Reynolds number, and local variables.
+/// The class has methods to initialise the solver, integrate the solution, write the solution to a file, and print the configuration.
+/// The class has private methods to clean up the solver, clean up the buffers, initialise the buffers, update the dx and dy values, advance the solution, calculate the node vorticity, calculate the interior vorticity, and time advance the vorticity.
 class LidDrivenCavity
 {
 public:

@@ -7,8 +7,8 @@ OBJS_TESTS_SCG = UnitTestSCG.o
 OBJS_TESTS_LDC = UnitTestLDC.o
 LDLIBS = -lblas -lboost_program_options -lboost_unit_test_framework #-lboost_chrono #-lboost_timer
 TARGET = solver
-TARGET_TESTS_SCG = unittest_scg
-TARGET_TESTS_LDC = unittest_ldc
+TARGET_TESTS_SCG = unittest_scg # tried to get unitests as a target with both unit tests but when doing that 1 test fails whilst separately they do not - to do with MPI
+TARGET_TESTS_LDC = unittest_ldc # tried to get unitests as a target with both unit tests but when doing that 1 test fails whilst separately they do not - to do with MPI
 TARGET_PROFILER = solver_profiler # it has special flags inside
 TARGET_DOXY = doxygen_file
 
@@ -31,12 +31,13 @@ $(TARGET_PROFILER): $(OBJS_MAIN) $(OBJS)
 	$(CXX) -o $@ $^ $(LDLIBS)
 
 doc:
+	doxygen -g $(TARGET_DOXY)
 	doxygen $(TARGET_DOXY)
 
 
 .PHONY: clean	
 clean:	
-	-rm -f *.o $(TARGET) $(TARGET_TESTS_SCG) $(TARGET_PROFILER) $(TARGET_TESTS_LDC) $(TARGET_DOXY) *.out
+	-rm -f *.o $(TARGET) $(TARGET_PROFILER) $(TARGET_TESTS_SCG) $(TARGET_TESTS_LDC) $(TARGET_DOXY) *.out
 	
 .PHONY: docs
 docs:

@@ -9,14 +9,12 @@ namespace po = boost::program_options;
 #include <omp.h>
 #include <cmath> // Include the cmath library for sqrt function
 
-/**
-* @file LidDrivenCavitySolver.cpp
-* @brief Solving the vorticity-stream function formulation of the
-* incompressible Navier-Stokes equations in 2D using the finite difference method.
-*
-* @param argc Number of command-line arguments.
-* @param argv Array of command-line arguments.
-*/
+/// @file LidDrivenCavitySolver.cpp
+/// @brief Solving the vorticity-stream function formulation of the
+/// incompressible Navier-Stokes equations in 2D using the finite difference method.
+/// @param argc Number of command-line arguments.
+/// @param argv Array of command-line arguments.
+/// @return 0 if the program terminates successfully, 1 otherwise.
 
 int main(int argc, char **argv)
 {

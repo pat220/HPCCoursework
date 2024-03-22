@@ -17,6 +17,7 @@ using namespace std;
 #define IDX(I, J) ((J) * Nx_local + (I))
 #define IDX_GLOBAL(I, J) ((J) * Nx + (I))
 
+/// @file SolverCG.cpp
 /// @class SolverCG
 /// @brief Class to solve the mathematical expression using the Conjugate Gradient method
 
